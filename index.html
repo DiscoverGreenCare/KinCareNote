@@ -126,6 +126,12 @@ body{font-family:'Outfit',sans-serif;background:var(--paper);color:var(--ink);di
 .perm-err{background:var(--red-light);border:1px solid var(--red);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--red);margin-top:12px;line-height:1.5;display:none;}
 .perm-skip{margin-top:12px;background:none;border:none;color:var(--muted);font-family:'Outfit',sans-serif;font-size:12px;text-decoration:underline;cursor:pointer;display:block;width:100%;text-align:center;touch-action:manipulation;}
 
+/* ── RECEIPT UPLOAD ── */
+.receipt-btn{width:100%;padding:14px;border-radius:11px;border:2px dashed var(--border);background:transparent;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;color:var(--moss-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;margin-top:12px;}
+.receipt-btn.uploaded{border-color:var(--moss);background:rgba(92,122,94,0.07);color:var(--moss-dark);}
+.receipt-preview{width:100%;border-radius:10px;margin-top:8px;max-height:160px;object-fit:cover;display:none;}
+.receipt-status{font-size:12px;color:var(--muted);margin-top:6px;text-align:center;min-height:16px;}
+
 /* ── NAME SETUP ── */
 .name-setup{padding:40px 20px;animation:up 0.3s ease;}
 .name-setup h2{font-family:'Fraunces',serif;font-size:24px;margin-bottom:6px;}
@@ -146,7 +152,7 @@ body{font-family:'Outfit',sans-serif;background:var(--paper);color:var(--ink);di
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────────
-const CLIENTS = ['Select client…','Amelia R.','Bernard T.','Clara M.','Dorothy S.','Eugene W.','Frances K.','George P.','Helen J.'];
+const CLIENTS = ['Select client…','Gloria Marlow'];
 let caregiverName  = localStorage.getItem('dgcs_cg') || '';
 let caregiverEmail = localStorage.getItem('dgcs_cg_email') || '';
 let answers = {};
@@ -565,11 +571,31 @@ function selectInputsHTML(s) {
 
 // ── INPUTS HTML ───────────────────────────────────────────────────
 function inputsHTML(s) {
-  return s.fields.map(f => `
+  let html = s.fields.map(f => `
     <div style="margin-bottom:12px;">
       <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
       <input class="field-input" type="${f.type}" id="${f.id}" placeholder="${f.placeholder||''}" value="${answers[f.id]||''}" onchange="handleInput('${f.id}',this.value)">
     </div>`).join('');
+
+  // Add receipt upload button to transport details step
+  if (s.q === 'Mileage and reimbursables') {
+    const hasReceipt = answers['receipt_uploaded'] ? 'uploaded' : '';
+    const receiptLabel = answers['receipt_uploaded']
+      ? '✓ Receipt uploaded — tap to replace'
+      : '📷 Upload Receipt Photo';
+    html += `
+      <div style="margin-top:4px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">Reimbursable Receipt</label>
+        <input type="file" id="receiptFile" accept="image/*" capture="environment" style="display:none" onchange="handleReceiptSelected(this)">
+        <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFile').click()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          ${receiptLabel}
+        </button>
+        <img id="receiptPreview" class="receipt-preview" src="" alt="Receipt preview">
+        <div class="receipt-status" id="receiptStatus">${answers['receipt_uploaded'] ? 'Receipt saved to client folder' : 'Optional — only needed if requesting reimbursement'}</div>
+      </div>`;
+  }
+  return html;
 }
 
 // ── ATTEST HTML ───────────────────────────────────────────────────
@@ -757,7 +783,17 @@ function goNext() {
 function goBack() {
   if(isListening) stopListening();
   commitCurrentStep();
-  if(step > 0){ step--; renderStage(); scrollTop(); }
+  if(step <= 0) return;
+  step--;
+
+  // Mirror the forward skip logic so skipped steps are never shown going back
+  if(step === 17 && answers['transport'] === 'No') { step--; }
+  else if(step === 15 && answers['safety_flag'] === 'No') { step--; }
+  else if(step === 12 && answers['baseline_change'] === STAGES[11].options[0]) { step--; }
+  else if(step === 4 && !disruptionRequired() && !isSecondaryOnCall()) { step -= 2; }
+  else if(step === 3 && !isSecondaryOnCall()) { step--; }
+
+  renderStage(); scrollTop();
 }
 
 function scrollTop() {
@@ -809,6 +845,56 @@ function renderReview() {
 function jumpTo(i) { step=i; renderStage(); scrollTop(); }
 
 // ── SUBMIT ────────────────────────────────────────────────────────
+// ── RECEIPT UPLOAD ────────────────────────────────────────────────
+function handleReceiptSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const status = document.getElementById('receiptStatus');
+  const preview = document.getElementById('receiptPreview');
+  const btn = document.querySelector('.receipt-btn');
+
+  // Show preview immediately
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+
+  if (status) status.textContent = 'Uploading…';
+
+  // Convert to base64 and upload
+  const b64reader = new FileReader();
+  b64reader.onload = (e) => {
+    const base64 = e.target.result.split(',')[1]; // strip data URL prefix
+    const visitDate = answers['visit_date'] || new Date().toISOString().split('T')[0];
+    const clientName = answers['client'] || '';
+    const fileName = 'receipt_' + clientName.replace(/\s+/g,'_') + '_' + visitDate + '_' + Date.now() + '.jpg';
+
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: 'receipt',
+        clientName,
+        visitDate,
+        fileName,
+        fileData: base64
+      })
+    })
+    .then(() => {
+      answers['receipt_uploaded'] = true;
+      if (status) status.textContent = "✓ Receipt saved to " + clientName + " folder";
+      if (btn) { btn.classList.add('uploaded'); btn.querySelector('span') && (btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> ✓ Receipt uploaded — tap to replace'); }
+    })
+    .catch(() => {
+      if (status) status.textContent = '⚠️ Upload failed — try again';
+    });
+  };
+  b64reader.readAsDataURL(file);
+}
+
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqPtx7KRwWPTJX1w_W-C3otIgAy03Uy_w5mMfyu9ejUC6yfSgmw_xjCmjCIhjic1PzGg/exec';
 
 function submitNotes() {
