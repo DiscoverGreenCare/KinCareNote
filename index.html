@@ -127,10 +127,14 @@ body{font-family:'Outfit',sans-serif;background:var(--paper);color:var(--ink);di
 .perm-skip{margin-top:12px;background:none;border:none;color:var(--muted);font-family:'Outfit',sans-serif;font-size:12px;text-decoration:underline;cursor:pointer;display:block;width:100%;text-align:center;touch-action:manipulation;}
 
 /* ── RECEIPT UPLOAD ── */
-.receipt-btn{width:100%;padding:14px;border-radius:11px;border:2px dashed var(--border);background:transparent;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;color:var(--moss-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;margin-top:12px;}
-.receipt-btn.uploaded{border-color:var(--moss);background:rgba(92,122,94,0.07);color:var(--moss-dark);}
-.receipt-preview{width:100%;border-radius:10px;margin-top:8px;max-height:160px;object-fit:cover;display:none;}
-.receipt-status{font-size:12px;color:var(--muted);margin-top:6px;text-align:center;min-height:16px;}
+.receipt-add-btn{width:100%;padding:14px;border-radius:11px;border:2px dashed var(--border);background:transparent;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;color:var(--moss-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;margin-top:4px;}
+.receipt-add-btn:active{background:rgba(92,122,94,0.07);}
+.receipt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.receipt-thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+.receipt-thumb img{width:100%;height:100%;object-fit:cover;}
+.receipt-thumb .rt-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);font-size:20px;}
+.receipt-thumb .rt-remove{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:var(--red);border:none;color:white;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+.receipt-count{font-size:12px;color:var(--moss-dark);font-weight:600;margin-top:8px;text-align:center;}
 
 /* ── NAME SETUP ── */
 .name-setup{padding:40px 20px;animation:up 0.3s ease;}
@@ -585,21 +589,18 @@ function inputsHTML(s) {
       : '📷 Upload Receipt Photo';
     html += `
       <div style="margin-top:4px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">Reimbursable Receipt</label>
-        <input type="file" id="receiptFile" accept="image/*,application/pdf,.heic,.heif" multiple style="display:none" onchange="handleReceiptSelected(this)"><input type="file" id="receiptFileAlt" accept="*/*" multiple style="display:none" onchange="handleReceiptSelected(this)">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFile').click()" style="margin-top:0;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            Take Photo
-          </button>
-          <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFileAlt').click()" style="margin-top:0;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            Choose File
-          </button>
-        </div>
-        <img id="receiptPreview" class="receipt-preview" src="" alt="Receipt preview">
-        <div class="receipt-status" id="receiptStatus">${answers['receipt_uploaded'] ? 'Receipt saved to client folder' : 'Optional — only needed if requesting reimbursement'}</div>
+        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:6px;">Reimbursable Receipts</label>
+        <input type="file" id="receiptFile" accept="image/*,application/pdf,.heic,.heif" style="display:none" onchange="handleReceiptSelected(this)">
+        <div class="receipt-grid" id="receiptGrid"></div>
+        <div class="receipt-count" id="receiptCount"></div>
+        <button class="receipt-add-btn" id="receiptAddBtn" onclick="document.getElementById('receiptFile').click()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Add Receipt
+        </button>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center;">Optional — tap to add one or more receipt photos</div>
       </div>`;
+  // Restore any already-uploaded receipt thumbnails
+  setTimeout(() => restoreReceiptGrid(), 50);
   }
   return html;
 }
@@ -861,69 +862,83 @@ function jumpTo(i) { step=i; renderStage(); scrollTop(); }
 
 // ── SUBMIT ────────────────────────────────────────────────────────
 // ── RECEIPT UPLOAD ────────────────────────────────────────────────
-function handleReceiptSelected(input) {
-  if (!input.files || !input.files.length) return;
-  const files = Array.from(input.files);
-  const status = document.getElementById('receiptStatus');
-  const preview = document.getElementById('receiptPreview');
-  const visitDate = answers['visit_date'] || new Date().toISOString().split('T')[0];
-  const clientName = answers['client'] || '';
+// Receipt management — supports adding one at a time with thumbnail grid
+if (!answers['receipts']) answers['receipts'] = [];
 
-  // Show preview of first file
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    preview.src = e.target.result;
-    preview.style.display = 'block';
-  };
-  reader.readAsDataURL(files[0]);
-
-  if (status) status.textContent = 'Uploading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '…';
-
-  // Upload all files
-  let uploaded = 0;
-  let failed = 0;
-
-  files.forEach((file, idx) => {
-    const b64reader = new FileReader();
-    b64reader.onload = (e) => {
-      const base64 = e.target.result.split(',')[1];
-      const ext = file.name.split('.').pop() || 'jpg';
-      const fileName = 'receipt_' + clientName.replace(/\s+/g,'_') + '_' + visitDate + '_' + (idx+1) + '_' + Date.now() + '.' + ext;
-
-      fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          type: 'receipt',
-          clientName,
-          visitDate,
-          fileName,
-          fileData: base64
-        })
-      })
-      .then(() => {
-        uploaded++;
-        answers['receipt_uploaded'] = true;
-        if (status) {
-          if (uploaded === files.length && failed === 0) {
-            status.textContent = "✓ " + uploaded + " receipt" + (uploaded > 1 ? 's' : '') + " saved to " + clientName + " folder";
-          } else if (uploaded + failed === files.length) {
-            status.textContent = "✓ " + uploaded + " uploaded, " + failed + " failed";
-          } else {
-            status.textContent = 'Uploading… (' + (uploaded + failed) + '/' + files.length + ')';
-          }
-        }
-      })
-      .catch(() => {
-        failed++;
-        if (status && uploaded + failed === files.length) {
-          status.textContent = failed === files.length ? '⚠️ Upload failed — try again' : "✓ " + uploaded + " uploaded, " + failed + " failed";
-        }
-      });
-    };
-    b64reader.readAsDataURL(file);
+function restoreReceiptGrid() {
+  const grid = document.getElementById('receiptGrid');
+  const count = document.getElementById('receiptCount');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const receipts = answers['receipts'] || [];
+  receipts.forEach((r, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'receipt-thumb';
+    thumb.innerHTML = '<img src="' + r.preview + '" alt="Receipt ' + (i+1) + '">' +
+      '<div class="rt-status">' + (r.uploaded ? '✓' : r.error ? '⚠️' : '⏳') + '</div>' +
+      '<button class="rt-remove" onclick="removeReceipt(' + i + ')">×</button>';
+    grid.appendChild(thumb);
   });
+  if (count) {
+    count.textContent = receipts.length > 0
+      ? receipts.length + ' receipt' + (receipts.length > 1 ? 's' : '') + ' added'
+      : '';
+  }
+  // Update add button label
+  const btn = document.getElementById('receiptAddBtn');
+  if (btn) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> ' +
+    (receipts.length > 0 ? 'Add Another Receipt' : 'Add Receipt');
+}
+
+function removeReceipt(idx) {
+  if (!answers['receipts']) return;
+  answers['receipts'].splice(idx, 1);
+  restoreReceiptGrid();
+}
+
+function handleReceiptSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const visitDate  = answers['visit_date'] || new Date().toISOString().split('T')[0];
+  const clientName = answers['client'] || '';
+  const receiptIdx = (answers['receipts'] || []).length;
+  const ext        = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const fileName   = 'receipt_' + clientName.replace(/ /g,'_') + '_' + visitDate + '_' + (receiptIdx+1) + '_' + Date.now() + '.' + ext;
+
+  // Add placeholder entry immediately so caregiver sees it
+  if (!answers['receipts']) answers['receipts'] = [];
+  const entry = { preview: '', uploaded: false, error: false, fileName };
+  answers['receipts'].push(entry);
+
+  // Read preview
+  const previewReader = new FileReader();
+  previewReader.onload = (e) => {
+    entry.preview = e.target.result;
+    restoreReceiptGrid();
+
+    // Now upload
+    const base64 = e.target.result.split(',')[1];
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type: 'receipt', clientName, visitDate, fileName, fileData: base64 })
+    })
+    .then(() => {
+      entry.uploaded = true;
+      entry.error = false;
+      answers['receipt_uploaded'] = true;
+      restoreReceiptGrid();
+    })
+    .catch(() => {
+      entry.error = true;
+      restoreReceiptGrid();
+    });
+  };
+  previewReader.readAsDataURL(file);
+
+  // Reset input so same file can be re-selected if needed
+  input.value = '';
 }
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqPtx7KRwWPTJX1w_W-C3otIgAy03Uy_w5mMfyu9ejUC6yfSgmw_xjCmjCIhjic1PzGg/exec';
