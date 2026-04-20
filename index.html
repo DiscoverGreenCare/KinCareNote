@@ -682,7 +682,13 @@ function stopListening() {
   isListening=false;
   clearInterval(timerIv); clearTimeout(timerTo);
   try{recognition.abort();}catch(e){}
-  if(transcriptEl) answers[STAGES[step].id]=transcriptEl.textContent.trim();
+  if(transcriptEl) {
+    const val = transcriptEl.textContent.trim();
+    answers[STAGES[step].id] = val;
+    // Re-enable Next button if there's content
+    const nb = document.getElementById('nextBtn');
+    if(nb && val) nb.disabled = false;
+  }
   if(interimEl) interimEl.textContent='';
   const vb=document.getElementById('vbtn'),vt=document.getElementById('vbtxt'),
         wv=document.getElementById('wv'),tw=document.getElementById('twrap');
