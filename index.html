@@ -514,7 +514,7 @@ function voiceHTML(s) {
       <div class="timer-track"><div class="timer-fill" id="tfill"></div></div>
     </div>
     <div class="transcript-wrap">
-      <div class="transcript" id="tdisp" contenteditable="true" data-ph="Your response will appear here…">${saved}</div>
+      <div class="transcript" id="tdisp" contenteditable="true" data-ph="Your response will appear here…" oninput="onTranscriptInput()">${saved}</div>
       <div class="interim" id="tint"></div>
     </div>`;
 }
@@ -586,11 +586,17 @@ function inputsHTML(s) {
     html += `
       <div style="margin-top:4px;">
         <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">Reimbursable Receipt</label>
-        <input type="file" id="receiptFile" accept="image/*" style="display:none" onchange="handleReceiptSelected(this)">
-        <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFile').click()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          ${receiptLabel}
-        </button>
+        <input type="file" id="receiptFile" accept="image/*,application/pdf,.heic,.heif" style="display:none" onchange="handleReceiptSelected(this)"><input type="file" id="receiptFileAlt" accept="*/*" style="display:none" onchange="handleReceiptSelected(this)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFile').click()" style="margin-top:0;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Take Photo
+          </button>
+          <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFileAlt').click()" style="margin-top:0;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            Choose File
+          </button>
+        </div>
         <img id="receiptPreview" class="receipt-preview" src="" alt="Receipt preview">
         <div class="receipt-status" id="receiptStatus">${answers['receipt_uploaded'] ? 'Receipt saved to client folder' : 'Optional — only needed if requesting reimbursement'}</div>
       </div>`;
@@ -639,6 +645,15 @@ function toggleAttest(el) {
   el.classList.toggle('selected', answers['attest']);
   const nb = document.getElementById('nextBtn');
   if (nb) nb.disabled = !answers['attest'];
+}
+
+function onTranscriptInput() {
+  // Called when user types directly into the transcript div
+  if (!transcriptEl) return;
+  const val = transcriptEl.textContent.trim();
+  answers[STAGES[step].id] = val;
+  const nb = document.getElementById('nextBtn');
+  if (nb) nb.disabled = needsAnswer(STAGES[step]);
 }
 
 function speakQ(i) {
