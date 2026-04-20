@@ -475,6 +475,11 @@ function needsAnswer(s) {
     if (s.type === 'check') return !answers[s.id] || answers[s.id].length === 0;
     if (s.type === 'select+inputs') return !answers['client'];
   }
+  // Voice fields: required if optional===false AND no saved answer yet
+  if (s.type === 'voice' && s.optional === false) {
+    return !(answers[s.id] && answers[s.id].trim());
+  }
+  // Disruption notes: conditionally required based on prior answers
   if (s.id === 'disruption_notes' && disruptionRequired()) {
     return !(answers[s.id] && answers[s.id].trim());
   }
@@ -685,9 +690,9 @@ function stopListening() {
   if(transcriptEl) {
     const val = transcriptEl.textContent.trim();
     answers[STAGES[step].id] = val;
-    // Re-enable Next button if there's content
+    // Re-evaluate Next button based on whether requirement is now met
     const nb = document.getElementById('nextBtn');
-    if(nb && val) nb.disabled = false;
+    if(nb) nb.disabled = needsAnswer(STAGES[step]);
   }
   if(interimEl) interimEl.textContent='';
   const vb=document.getElementById('vbtn'),vt=document.getElementById('vbtxt'),
