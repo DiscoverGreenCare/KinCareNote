@@ -586,7 +586,7 @@ function inputsHTML(s) {
     html += `
       <div style="margin-top:4px;">
         <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">Reimbursable Receipt</label>
-        <input type="file" id="receiptFile" accept="image/*,application/pdf,.heic,.heif" style="display:none" onchange="handleReceiptSelected(this)"><input type="file" id="receiptFileAlt" accept="*/*" style="display:none" onchange="handleReceiptSelected(this)">
+        <input type="file" id="receiptFile" accept="image/*,application/pdf,.heic,.heif" multiple style="display:none" onchange="handleReceiptSelected(this)"><input type="file" id="receiptFileAlt" accept="*/*" multiple style="display:none" onchange="handleReceiptSelected(this)">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <button class="receipt-btn ${hasReceipt}" onclick="document.getElementById('receiptFile').click()" style="margin-top:0;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -862,52 +862,68 @@ function jumpTo(i) { step=i; renderStage(); scrollTop(); }
 // ── SUBMIT ────────────────────────────────────────────────────────
 // ── RECEIPT UPLOAD ────────────────────────────────────────────────
 function handleReceiptSelected(input) {
-  if (!input.files || !input.files[0]) return;
-  const file = input.files[0];
+  if (!input.files || !input.files.length) return;
+  const files = Array.from(input.files);
   const status = document.getElementById('receiptStatus');
   const preview = document.getElementById('receiptPreview');
-  const btn = document.querySelector('.receipt-btn');
+  const visitDate = answers['visit_date'] || new Date().toISOString().split('T')[0];
+  const clientName = answers['client'] || '';
 
-  // Show preview immediately
+  // Show preview of first file
   const reader = new FileReader();
   reader.onload = (e) => {
     preview.src = e.target.result;
     preview.style.display = 'block';
   };
-  reader.readAsDataURL(file);
+  reader.readAsDataURL(files[0]);
 
-  if (status) status.textContent = 'Uploading…';
+  if (status) status.textContent = 'Uploading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '…';
 
-  // Convert to base64 and upload
-  const b64reader = new FileReader();
-  b64reader.onload = (e) => {
-    const base64 = e.target.result.split(',')[1]; // strip data URL prefix
-    const visitDate = answers['visit_date'] || new Date().toISOString().split('T')[0];
-    const clientName = answers['client'] || '';
-    const fileName = 'receipt_' + clientName.replace(/\s+/g,'_') + '_' + visitDate + '_' + Date.now() + '.jpg';
+  // Upload all files
+  let uploaded = 0;
+  let failed = 0;
 
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        type: 'receipt',
-        clientName,
-        visitDate,
-        fileName,
-        fileData: base64
+  files.forEach((file, idx) => {
+    const b64reader = new FileReader();
+    b64reader.onload = (e) => {
+      const base64 = e.target.result.split(',')[1];
+      const ext = file.name.split('.').pop() || 'jpg';
+      const fileName = 'receipt_' + clientName.replace(/\s+/g,'_') + '_' + visitDate + '_' + (idx+1) + '_' + Date.now() + '.' + ext;
+
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type: 'receipt',
+          clientName,
+          visitDate,
+          fileName,
+          fileData: base64
+        })
       })
-    })
-    .then(() => {
-      answers['receipt_uploaded'] = true;
-      if (status) status.textContent = "✓ Receipt saved to " + clientName + " folder";
-      if (btn) { btn.classList.add('uploaded'); btn.querySelector('span') && (btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> ✓ Receipt uploaded — tap to replace'); }
-    })
-    .catch(() => {
-      if (status) status.textContent = '⚠️ Upload failed — try again';
-    });
-  };
-  b64reader.readAsDataURL(file);
+      .then(() => {
+        uploaded++;
+        answers['receipt_uploaded'] = true;
+        if (status) {
+          if (uploaded === files.length && failed === 0) {
+            status.textContent = "✓ " + uploaded + " receipt" + (uploaded > 1 ? 's' : '') + " saved to " + clientName + " folder";
+          } else if (uploaded + failed === files.length) {
+            status.textContent = "✓ " + uploaded + " uploaded, " + failed + " failed";
+          } else {
+            status.textContent = 'Uploading… (' + (uploaded + failed) + '/' + files.length + ')';
+          }
+        }
+      })
+      .catch(() => {
+        failed++;
+        if (status && uploaded + failed === files.length) {
+          status.textContent = failed === files.length ? '⚠️ Upload failed — try again' : "✓ " + uploaded + " uploaded, " + failed + " failed";
+        }
+      });
+    };
+    b64reader.readAsDataURL(file);
+  });
 }
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqPtx7KRwWPTJX1w_W-C3otIgAy03Uy_w5mMfyu9ejUC6yfSgmw_xjCmjCIhjic1PzGg/exec';
