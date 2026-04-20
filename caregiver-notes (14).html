@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CareNote — DGCS</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;1,300&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#1A1A18; --paper:#F5F0E8; --card:#FDFAF4;
+  --moss:#5C7A5E; --moss-light:#8FAF91; --moss-dark:#3D5C3F;
+  --gold:#B8860B; --gold-light:#E8C84A; --gold-pale:#FBF3D5;
+  --red:#B83232; --red-light:rgba(184,50,50,0.08);
+  --muted:#8A8478; --border:#DDD8CC; --shadow:rgba(26,26,24,0.07);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Outfit',sans-serif;background:var(--paper);color:var(--ink);display:flex;flex-direction:column;}
+
+/* ── HEADER ── */
+.header{background:var(--ink);padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.header-left{display:flex;align-items:baseline;gap:8px;}
+.logo{font-family:'Fraunces',serif;font-size:20px;color:var(--paper);letter-spacing:-0.3px;}
+.logo-sub{font-size:11px;color:var(--moss-light);font-weight:500;letter-spacing:1.5px;text-transform:uppercase;}
+.caregiver-pill{background:rgba(255,255,255,0.08);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--moss-light);cursor:pointer;border:1px solid rgba(255,255,255,0.12);}
+
+/* ── PROGRESS ── */
+.progress-track{height:2px;background:var(--border);flex-shrink:0;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--moss),var(--gold-light));transition:width 0.4s ease;}
+
+/* ── SCROLL AREA ── */
+.scroll-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 40px;}
+
+/* ── STAGE LABEL ── */
+.stage-label{display:flex;align-items:center;gap:8px;padding:18px 0 6px;}
+.stage-num{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;}
+.stage-dots{display:flex;gap:3px;flex:1;}
+.sdot{height:3px;flex:1;border-radius:2px;background:var(--border);transition:background 0.3s;}
+.sdot.done{background:var(--moss);}
+.sdot.active{background:var(--gold);}
+
+/* ── CARD ── */
+.card{background:var(--card);border-radius:14px;padding:20px;border:1px solid var(--border);box-shadow:0 1px 8px var(--shadow);margin-bottom:12px;animation:up 0.3s ease;}
+@keyframes up{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.card-section{font-size:10px;font-weight:600;color:var(--moss-dark);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;}
+.card-q{font-family:'Fraunces',serif;font-size:20px;line-height:1.3;margin-bottom:4px;}
+.card-hint{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:16px;}
+
+/* ── SPEAK BTN ── */
+.speak-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--moss);font-family:'Outfit',sans-serif;font-size:11px;font-weight:500;cursor:pointer;padding:0;margin-bottom:10px;touch-action:manipulation;}
+
+/* ── VOICE BTN ── */
+.voice-btn{width:100%;padding:16px;border-radius:12px;border:2px solid var(--moss);background:transparent;color:var(--moss-dark);font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;user-select:none;}
+.voice-btn.listening{border-color:var(--red);background:var(--red-light);color:var(--red);animation:pulse 1.5s ease infinite;}
+.voice-btn:disabled{opacity:0.35;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(184,50,50,0.25);}50%{box-shadow:0 0 0 7px rgba(184,50,50,0);}}
+.wave{display:flex;align-items:center;gap:2px;height:16px;}
+.wb{width:3px;background:var(--red);border-radius:2px;animation:wv 0.7s ease infinite;}
+.wb:nth-child(2){animation-delay:0.1s}.wb:nth-child(3){animation-delay:0.2s}.wb:nth-child(4){animation-delay:0.3s}.wb:nth-child(5){animation-delay:0.4s}
+@keyframes wv{0%,100%{height:3px}50%{height:14px}}
+
+/* ── TIMER ── */
+.timer-wrap{margin-top:8px;display:none;}
+.timer-row{font-size:11px;color:var(--red);font-weight:500;display:flex;justify-content:space-between;margin-bottom:4px;}
+.timer-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.timer-fill{height:100%;background:var(--red);width:100%;}
+
+/* ── TRANSCRIPT ── */
+.transcript-wrap{margin-top:10px;}
+.transcript{min-height:64px;background:var(--paper);border-radius:8px;padding:12px;border:1px solid var(--border);font-size:13px;line-height:1.6;color:var(--ink);outline:none;width:100%;}
+.transcript:empty:before{content:attr(data-ph);color:var(--muted);}
+.interim{font-size:12px;color:var(--muted);font-style:italic;min-height:18px;margin-top:4px;padding:0 2px;}
+.status-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:10px;}
+.status-badge.ok{background:rgba(92,122,94,0.12);color:var(--moss-dark);}
+.status-badge.no{background:rgba(138,132,120,0.1);color:var(--muted);}
+
+/* ── SELECT / INPUT ── */
+.field-select{width:100%;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);font-family:'Outfit',sans-serif;font-size:15px;color:var(--ink);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A8478' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;cursor:pointer;}
+.field-input{width:100%;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);font-family:'Outfit',sans-serif;font-size:15px;color:var(--ink);outline:none;}
+.field-input:focus,.field-select:focus{border-color:var(--moss);outline:none;}
+.lock-badge{display:inline-flex;align-items:center;gap:4px;background:var(--gold-pale);color:var(--gold);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;margin-bottom:8px;}
+
+/* ── RADIO / CHECK GROUPS ── */
+.radio-group,.check-group{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+.radio-opt,.check-opt{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;touch-action:manipulation;transition:all 0.15s;}
+.radio-opt.selected,.check-opt.selected{border-color:var(--moss);background:rgba(92,122,94,0.07);}
+.radio-circle{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.radio-opt.selected .radio-circle{border-color:var(--moss);background:var(--moss);}
+.radio-dot{width:7px;height:7px;border-radius:50%;background:white;}
+.check-box{width:18px;height:18px;border-radius:4px;border:2px solid var(--border);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.check-opt.selected .check-box{border-color:var(--moss);background:var(--moss);}
+.check-mark{color:white;font-size:11px;font-weight:700;}
+.opt-text{font-size:13px;line-height:1.4;flex:1;}
+
+/* ── TIME ROW ── */
+.time-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.time-field label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:5px;}
+
+/* ── ACTIONS ── */
+.actions{display:flex;gap:8px;margin-top:14px;}
+.btn-back{flex:1;padding:13px;border-radius:10px;border:1.5px solid var(--border);background:transparent;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;touch-action:manipulation;}
+.btn-next{flex:2;padding:13px;border-radius:10px;border:none;background:var(--ink);font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;color:var(--paper);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation;}
+.btn-next:disabled{opacity:0.35;}
+
+/* ── REVIEW ── */
+.review-card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid var(--border);}
+.review-section{font-size:10px;font-weight:700;color:var(--moss-dark);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+.review-q{font-size:11px;color:var(--muted);margin-bottom:2px;}
+.review-a{font-size:13px;color:var(--ink);line-height:1.5;}
+.review-edit{float:right;background:none;border:none;color:var(--moss);font-size:11px;font-weight:500;cursor:pointer;font-family:'Outfit',sans-serif;}
+.submit-btn{width:100%;padding:16px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--moss-dark),var(--moss));font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;color:white;cursor:pointer;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
+
+/* ── SUCCESS ── */
+.success{text-align:center;padding:50px 20px;animation:up 0.35s ease;}
+.success-ring{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--moss-dark),var(--moss));display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:34px;}
+.success h2{font-family:'Fraunces',serif;font-size:26px;margin-bottom:8px;}
+.success p{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:28px;}
+.btn-new{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:var(--paper);border:none;padding:14px 26px;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;touch-action:manipulation;}
+
+/* ── PERM SCREEN ── */
+.perm-screen{padding:50px 20px;text-align:center;animation:up 0.3s ease;}
+.perm-icon{width:72px;height:72px;background:var(--ink);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:30px;}
+.perm-screen h2{font-family:'Fraunces',serif;font-size:24px;margin-bottom:8px;}
+.perm-screen p{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:24px;}
+.perm-btn{width:100%;padding:16px;border-radius:12px;border:none;background:var(--ink);color:var(--paper);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
+.perm-err{background:var(--red-light);border:1px solid var(--red);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--red);margin-top:12px;line-height:1.5;display:none;}
+.perm-skip{margin-top:12px;background:none;border:none;color:var(--muted);font-family:'Outfit',sans-serif;font-size:12px;text-decoration:underline;cursor:pointer;display:block;width:100%;text-align:center;touch-action:manipulation;}
+
+/* ── NAME SETUP ── */
+.name-setup{padding:40px 20px;animation:up 0.3s ease;}
+.name-setup h2{font-family:'Fraunces',serif;font-size:24px;margin-bottom:6px;}
+.name-setup p{color:var(--muted);font-size:13px;margin-bottom:20px;}
+.name-setup-btn{width:100%;padding:15px;border-radius:12px;border:none;background:var(--ink);color:var(--paper);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;touch-action:manipulation;}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <span class="logo">CareNote</span>
+    <span class="logo-sub">DGCS</span>
+  </div>
+  <div class="caregiver-pill" id="cgPill" onclick="resetCaregiver()" style="display:none"></div>
+</div>
+<div class="progress-track"><div class="progress-fill" id="pFill" style="width:0%"></div></div>
+<div class="scroll-area" id="root"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────
+const CLIENTS = ['Select client…','Amelia R.','Bernard T.','Clara M.','Dorothy S.','Eugene W.','Frances K.','George P.','Helen J.'];
+let caregiverName  = localStorage.getItem('dgcs_cg') || '';
+let caregiverEmail = localStorage.getItem('dgcs_cg_email') || '';
+let answers = {};
+let step = 0;
+let micGranted = false;
+let isListening = false;
+let recognition = null, timerIv = null, timerTo = null;
+let accumulated = '';
+let transcriptEl = null, interimEl = null;
+const REC_SEC = 45;
+const supported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+// ── STAGES ────────────────────────────────────────────────────────
+// Each stage = one card. Type: voice | radio | check | select | inputs | attest
+const STAGES = [
+  // 0 — Visit Details
+  { section:'Visit Details', type:'select+inputs',
+    fields:[
+      {id:'client',      label:'Client Name',              type:'select', options:CLIENTS, tapOnly:true},
+      {id:'visit_date',  label:'Date of Visit',            type:'date'},
+      {id:'shift_start', label:'Scheduled Shift Start Time', type:'time'},
+      {id:'time_in',     label:'Actual Time In',           type:'time'},
+      {id:'time_out',    label:'Actual Time Out',          type:'time'},
+    ],
+    q:'Who did you see today, and when?',
+    hint:'Select the client. Date defaults to today — adjust if needed.'
+  },
+  // 1
+  { section:'Visit Details', type:'radio', id:'disruption', required:true,
+    q:'Did this visit occur without any disruption to the originally scheduled care window?',
+    hint:'One tap.',
+    options:['Yes — occurred as scheduled','Started late (with or without time made up)','Ended early','Ended late','Interrupted / partial coverage']
+  },
+  // 2
+  { section:'Visit Details', type:'radio', id:'shift_nature', required:true,
+    q:'What was the nature of this shift?',
+    hint:'One tap.',
+    options:['Regularly scheduled shift','Planned coverage — more than 24 hours notice','Activation — less than 24 hours notice, requires admin approval','Emergency — same-day request OR request during a scheduled shift','Secondary on-call — not activated (stipend only)']
+  },
+  // 3 — secondary on-call only (skipped otherwise)
+  { section:'Secondary On-Call Details', type:'inputs',
+    fields:[
+      {id:'oncall_hours', label:'Scheduled shift length in hours', type:'text', placeholder:'e.g. 8', optional:true},
+    ],
+    q:'If secondary on-call (not activated), what was the scheduled shift length in hours?',
+    hint:'Enter the number of hours for the on-call shift.'
+  },
+  // 4 — disruption explanation (required if disrupted or non-standard; skipped if all clear)
+  { section:'Service Disruption Explanation', type:'voice', id:'disruption_notes',
+    q:'If there was any disruption, briefly explain what happened and whether total hours were adjusted.',
+    hint:'Required if visit was disrupted or this is a non-standard shift. Speak freely.',
+    optional:true
+  },
+  // 5
+  { section:'Care Provided', type:'check', id:'services', required:true,
+    q:'Services Provided',
+    hint:'Tap all that apply.',
+    options:['Companionship / conversation','Personal care assistance','Meal preparation / assistance','Light housekeeping','Laundry','Transportation / escort','Appointment accompaniment','Errands','Safety supervision','Other']
+  },
+  // 6
+  { section:'Care Provided', type:'voice', id:'engagement',
+    q:'How did you meaningfully engage with the client during this visit?',
+    hint:'Examples: conversation, shared activities, routines supported, reassurance provided, moments of connection.',
+    optional:false
+  },
+  // 7
+  { section:'Care Provided', type:'voice', id:'small_detail',
+    q:'One small detail that mattered today…',
+    hint:'Optional but encouraged. Even something small counts.',
+    optional:true
+  },
+  // 8
+  { section:'Client Status & Changes', type:'radio', id:'emotional', required:true,
+    q:'How did the client seem emotionally today?',
+    hint:'One tap.',
+    options:['Baseline / typical','More positive than usual','More withdrawn than usual','Anxious / distressed','Irritable / agitated']
+  },
+  // 9
+  { section:'Client Status & Changes', type:'radio', id:'mobility', required:true,
+    q:'How did the client move and navigate their space today?',
+    hint:'One tap.',
+    options:['Baseline','Slightly less steady than usual','Significantly less steady than usual','Needed more hands-on support than usual']
+  },
+  // 10
+  { section:'Client Status & Changes', type:'radio', id:'nutrition', required:true,
+    q:'How did eating/hydration go today (if applicable)?',
+    hint:'One tap.',
+    options:['Baseline / typical','Ate/drank less than usual','Refused meals / low intake','Not applicable']
+  },
+  // 11
+  { section:'Client Status & Changes', type:'radio', id:'baseline_change', required:true,
+    q:'Did you notice anything different compared to the client\'s usual baseline or routine today?',
+    hint:'One tap.',
+    options:['No changes noted','Yes — small change','Yes — meaningful change']
+  },
+  // 12 — skipped if baseline_change = "No changes noted"
+  { section:'Client Status & Changes', type:'voice', id:'baseline_notes',
+    q:'If yes, describe what you observed…',
+    hint:'Objective, factual — no diagnosis.',
+    optional:true
+  },
+  // 13
+  { section:'Safety & Environment', type:'radio', id:'safety_flag', required:true,
+    q:'Did anything today feel unsafe, concerning, or worth noting for awareness?',
+    hint:'One tap.',
+    options:['No','Yes — near miss / concern','Yes — incident occurred (complete Incident Report too)']
+  },
+  // 14
+  { section:'Safety & Environment', type:'check', id:'env_factors', required:true,
+    q:'Did anything in the environment affect the quality or safety of care today?',
+    hint:'Tap all that apply. Tap None if clear.',
+    options:['Smoke exposure (active smoking during visit)','Heavy smoke odor residue impacting comfort','Clutter / fall risk','Pets interfering with care','Unclear supplies / missing equipment','Family dynamics impacting care','None','Other']
+  },
+  // 15 — skipped if safety_flag = "No"
+  { section:'Safety & Environment', type:'voice', id:'safety_notes',
+    q:'If yes, describe briefly.',
+    hint:'Objective only.',
+    optional:true
+  },
+  // 16
+  { section:'Appointments & Transportation', type:'radio', id:'transport', required:true,
+    q:'Was transportation provided during this visit?',
+    hint:'One tap.',
+    options:['No','Yes — client vehicle','Yes — caregiver vehicle (authorized)']
+  },
+  // 17 — skipped if transport = "No"
+  { section:'Appointments & Transportation', type:'inputs',
+    fields:[
+      {id:'mileage',          label:'Reimbursable Mileage (while with client, no commute)', type:'number', placeholder:'0',    optional:true},
+      {id:'reimbursable_desc',label:'Description of Reimbursable Purchases',                type:'text',   placeholder:'e.g. parking, activity supplies', optional:true},
+      {id:'reimbursable_amt', label:'Total Reimbursables Amount ($)',                       type:'number', placeholder:'0.00', optional:true},
+    ],
+    q:'Mileage and reimbursables',
+    hint:'Leave at 0 or blank if none.'
+  },
+  // 18
+  { section:'Follow-up & Handoff', type:'voice', id:'team_notes',
+    q:'Is there anything the care team or admin should know to better support this client?',
+    hint:'Optional but encouraged.',
+    optional:true
+  },
+  // 19
+  { section:'Follow-up & Handoff', type:'voice', id:'next_caregiver',
+    q:'What would be helpful for the next caregiver to know to ensure continuity and comfort?',
+    hint:'Routines, preferences, reminders, supplies running low, schedule notes, changes to be aware of.',
+    optional:true
+  },
+  // 20
+  { section:'Follow-up & Handoff', type:'voice', id:'wins',
+    q:'Was there anything today that felt especially successful or worth carrying forward?',
+    hint:'Optional.',
+    optional:true
+  },
+  // 21
+  { section:'Attestation', type:'attest', id:'attest',
+    q:'Caregiver Attestation', hint:''
+  }
+];
+
+const TOTAL = STAGES.length;
+
+// ── BOOT ──────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  if (navigator.permissions) {
+    navigator.permissions.query({name:'microphone'}).then(r => {
+      if (r.state === 'granted') { micGranted = true; boot(); }
+      else showPerm();
+    }).catch(() => showPerm());
+  } else showPerm();
+});
+
+function boot() {
+  if (!caregiverName) { showNameSetup(); return; }
+  document.getElementById('cgPill').style.display = 'block';
+  document.getElementById('cgPill').textContent = caregiverName;
+  answers = { caregiver_name: caregiverName, visit_date: today() };
+  step = 0;
+  renderStage();
+}
+
+function today() {
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+}
+
+// ── PERM ──────────────────────────────────────────────────────────
+function showPerm() {
+  document.getElementById('root').innerHTML = `
+    <div class="perm-screen">
+      <div class="perm-icon">🎙️</div>
+      <h2>Microphone Access</h2>
+      <p>CareNote uses your microphone so you can dictate visit notes hands-free on the drive home.</p>
+      <button class="perm-btn" id="permBtn" onclick="reqMic()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10a7 7 0 0 1-14 0M12 19v3M8 22h8"/></svg>
+        Allow Microphone & Continue
+      </button>
+      <div class="perm-err" id="permErr"></div>
+      <button class="perm-skip" onclick="skipMic()">Continue without voice (type only)</button>
+    </div>`;
+}
+
+async function reqMic() {
+  const btn = document.getElementById('permBtn'), err = document.getElementById('permErr');
+  btn.textContent = 'Requesting…'; btn.disabled = true; err.style.display = 'none';
+  try {
+    await navigator.mediaDevices.getUserMedia({audio:true});
+    micGranted = true; boot();
+  } catch(e) {
+    btn.textContent = 'Allow Microphone & Continue'; btn.disabled = false;
+    err.style.display = 'block';
+    err.innerHTML = e.name === 'NotAllowedError'
+      ? '❌ Blocked. Tap the lock icon in Chrome\'s address bar → Site Settings → Microphone → Allow, then reload.'
+      : `❌ ${e.message}`;
+  }
+}
+function skipMic() { micGranted = false; boot(); }
+
+// ── NAME SETUP ─────────────────────────────────────────────────────
+function showNameSetup() {
+  document.getElementById('root').innerHTML = `
+    <div class="name-setup">
+      <h2>Welcome to CareNote</h2>
+      <p>We'll remember your details so you never have to enter them again.</p>
+      <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:6px;">Your Full Name</label>
+      <input class="field-input" id="cgInput" type="text" placeholder="First and last name" autocomplete="name" style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:6px;">Your Work Email</label>
+      <input class="field-input" id="cgEmail" type="email" placeholder="you@discovergreencare.com" autocomplete="email" style="margin-bottom:4px;">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:16px;">Used for record-keeping only.</p>
+      <button class="name-setup-btn" onclick="saveName()">Save & Start Notes →</button>
+    </div>`;
+  setTimeout(() => document.getElementById('cgInput').focus(), 300);
+}
+
+function saveName() {
+  const val   = document.getElementById('cgInput').value.trim();
+  const email = document.getElementById('cgEmail') ? document.getElementById('cgEmail').value.trim() : '';
+  if (!val) return;
+  caregiverName  = val;
+  caregiverEmail = email;
+  localStorage.setItem('dgcs_cg', val);
+  localStorage.setItem('dgcs_cg_email', email);
+  boot();
+}
+
+function resetCaregiver() {
+  if (!confirm('Change caregiver name or email?')) return;
+  localStorage.removeItem('dgcs_cg');
+  localStorage.removeItem('dgcs_cg_email');
+  caregiverName = ''; caregiverEmail = '';
+  showNameSetup();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────
+function setPct(n) { document.getElementById('pFill').style.width = (n/TOTAL*100)+'%'; }
+
+function dotsHTML() {
+  return STAGES.map((_,i) => `<div class="sdot ${i<step?'done':i===step?'active':''}"></div>`).join('');
+}
+
+function renderStage() {
+  if (isListening) stopListening();
+  transcriptEl = null; interimEl = null;
+  setPct(step);
+  const s = STAGES[step];
+  const root = document.getElementById('root');
+
+  let body = '';
+  if (s.type === 'voice') body = voiceHTML(s);
+  else if (s.type === 'radio') body = radioHTML(s);
+  else if (s.type === 'check') body = checkHTML(s);
+  else if (s.type === 'select+inputs') body = selectInputsHTML(s);
+  else if (s.type === 'inputs') body = inputsHTML(s);
+  else if (s.type === 'attest') body = attestHTML();
+
+  const isFirst = step === 0;
+  const isLast = step === TOTAL - 1;
+  const backBtn = !isFirst ? `<button class="btn-back" onclick="goBack()">← Back</button>` : '';
+  const nextLabel = isLast ? 'Submit' : 'Next →';
+  const nextDis = needsAnswer(s) ? 'disabled' : '';
+
+  root.innerHTML = `
+    <div class="stage-label">
+      <span class="stage-num">${step+1} / ${TOTAL}</span>
+      <div class="stage-dots">${dotsHTML()}</div>
+    </div>
+    <div class="card">
+      <div class="card-section">${s.section}</div>
+      <div class="card-q">${s.q}</div>
+      ${s.hint ? `<p class="card-hint">${s.hint}</p>` : ''}
+      ${body}
+      <div class="actions">
+        ${backBtn}
+        <button class="btn-next" id="nextBtn" onclick="goNext()" ${nextDis}>
+          ${nextLabel}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>`;
+
+  // Grab direct DOM refs for voice
+  if (s.type === 'voice') {
+    transcriptEl = document.getElementById('tdisp');
+    interimEl = document.getElementById('tint');
+    if (transcriptEl && answers[s.id]) transcriptEl.textContent = answers[s.id];
+  }
+
+  // Set defaults for date/time inputs
+  if (s.type === 'select+inputs') {
+    const dateEl = document.getElementById('visit_date');
+    if (dateEl && !answers['visit_date']) dateEl.value = today();
+    else if (dateEl) dateEl.value = answers['visit_date'] || today();
+    ['shift_start','time_in','time_out'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && answers[id]) el.value = answers[id];
+    });
+    const cl = document.getElementById('client');
+    if (cl && answers['client']) cl.value = answers['client'];
+  }
+}
+
+// ── NEEDS ANSWER ──────────────────────────────────────────────────
+function needsAnswer(s) {
+  if (s.type === 'attest') return !answers['attest'];
+  if (s.required) {
+    if (s.type === 'radio') return !answers[s.id];
+    if (s.type === 'check') return !answers[s.id] || answers[s.id].length === 0;
+    if (s.type === 'select+inputs') return !answers['client'];
+  }
+  if (s.id === 'disruption_notes' && disruptionRequired()) {
+    return !(answers[s.id] && answers[s.id].trim());
+  }
+  return false;
+}
+
+// ── VOICE HTML ────────────────────────────────────────────────────
+function voiceHTML(s) {
+  const saved = answers[s.id] || '';
+  const badge = micGranted
+    ? `<span class="status-badge ok">✓ Microphone ready</span>`
+    : `<span class="status-badge no">Type below</span>`;
+  return `
+    ${badge}
+    <button class="speak-btn" onclick="speakQ(${step})">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      Read prompt aloud
+    </button>
+    <button class="voice-btn" id="vbtn" onclick="tapVoice()" ${!micGranted?'disabled':''}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10a7 7 0 0 1-14 0M12 19v3M8 22h8"/></svg>
+      <span id="vbtxt">Tap to speak</span>
+      <div class="wave" id="wv" style="display:none"><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div></div>
+    </button>
+    <div class="timer-wrap" id="twrap">
+      <div class="timer-row"><span>Recording — tap to stop</span><span id="tcnt">${REC_SEC}s</span></div>
+      <div class="timer-track"><div class="timer-fill" id="tfill"></div></div>
+    </div>
+    <div class="transcript-wrap">
+      <div class="transcript" id="tdisp" contenteditable="true" data-ph="Your response will appear here…">${saved}</div>
+      <div class="interim" id="tint"></div>
+    </div>`;
+}
+
+// ── RADIO HTML ────────────────────────────────────────────────────
+function radioHTML(s) {
+  return `<div class="radio-group" id="rg_${s.id}">` +
+    s.options.map((o,i) => {
+      const sel = answers[s.id] === o ? 'selected' : '';
+      return `<div class="radio-opt ${sel}" onclick="pickRadio('${s.id}','${o.replace(/'/g,"\\'")}',this)">
+        <div class="radio-circle"><div class="radio-dot"></div></div>
+        <span class="opt-text">${o}</span>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+// ── CHECK HTML ────────────────────────────────────────────────────
+function checkHTML(s) {
+  const saved = answers[s.id] || [];
+  return `<div class="check-group" id="cg_${s.id}">` +
+    s.options.map(o => {
+      const sel = saved.includes(o) ? 'selected' : '';
+      return `<div class="check-opt ${sel}" onclick="toggleCheck('${s.id}','${o.replace(/'/g,"\\'")}',this)">
+        <div class="check-box"><span class="check-mark">✓</span></div>
+        <span class="opt-text">${o}</span>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+// ── SELECT+INPUTS HTML ────────────────────────────────────────────
+function selectInputsHTML(s) {
+  let html = '';
+  s.fields.forEach(f => {
+    if (f.type === 'select') {
+      const opts = f.options.map((o,i) => `<option value="${i?o:''}">${o}</option>`).join('');
+      html += `<div style="margin-bottom:12px;">
+        <div class="lock-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Tap only — no voice</div>
+        <select class="field-select" id="${f.id}" onchange="handleSelect('${f.id}',this.value)">${opts}</select>
+      </div>`;
+    } else if (f.type === 'date') {
+      html += `<div style="margin-bottom:12px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
+        <input class="field-input" type="date" id="${f.id}" onchange="handleInput('${f.id}',this.value)" value="${today()}">
+      </div>`;
+    } else if (f.type === 'time') {
+      html += `<div style="margin-bottom:12px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
+        <input class="field-input" type="time" id="${f.id}" onchange="handleInput('${f.id}',this.value)">
+      </div>`;
+    }
+  });
+  return html;
+}
+
+// ── INPUTS HTML ───────────────────────────────────────────────────
+function inputsHTML(s) {
+  return s.fields.map(f => `
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
+      <input class="field-input" type="${f.type}" id="${f.id}" placeholder="${f.placeholder||''}" value="${answers[f.id]||''}" onchange="handleInput('${f.id}',this.value)">
+    </div>`).join('');
+}
+
+// ── ATTEST HTML ───────────────────────────────────────────────────
+function attestHTML() {
+  const sel = answers['attest'] ? 'selected' : '';
+  return `
+    <div class="check-opt ${sel}" id="attestOpt" onclick="toggleAttest(this)" style="margin-top:4px;">
+      <div class="check-box"><span class="check-mark">✓</span></div>
+      <span class="opt-text" style="font-size:13px;line-height:1.5;">I confirm this note is accurate, objective, and complete to the best of my knowledge.</span>
+    </div>`;
+}
+
+// ── HANDLERS ──────────────────────────────────────────────────────
+function handleSelect(id, val) {
+  answers[id] = val;
+  const nb = document.getElementById('nextBtn');
+  if (nb && id === 'client') nb.disabled = !val;
+}
+
+function handleInput(id, val) { answers[id] = val; }
+
+function pickRadio(id, val, el) {
+  answers[id] = val;
+  document.querySelectorAll(`#rg_${id} .radio-opt`).forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  const nb = document.getElementById('nextBtn');
+  if (nb) nb.disabled = false;
+}
+
+function toggleCheck(id, val, el) {
+  if (!answers[id]) answers[id] = [];
+  const idx = answers[id].indexOf(val);
+  if (idx > -1) { answers[id].splice(idx,1); el.classList.remove('selected'); }
+  else { answers[id].push(val); el.classList.add('selected'); }
+  const nb = document.getElementById('nextBtn');
+  if (nb) nb.disabled = answers[id].length === 0;
+}
+
+function toggleAttest(el) {
+  answers['attest'] = !answers['attest'];
+  el.classList.toggle('selected', answers['attest']);
+  const nb = document.getElementById('nextBtn');
+  if (nb) nb.disabled = !answers['attest'];
+}
+
+function speakQ(i) {
+  const s = STAGES[i];
+  const synth = window.speechSynthesis;
+  if (!synth) return;
+  synth.cancel();
+  synth.speak(Object.assign(new SpeechSynthesisUtterance(s.q + '. ' + (s.hint||'')), {rate:0.95}));
+}
+
+// ── VOICE RECORDING ───────────────────────────────────────────────
+let lastTap = 0;
+function tapVoice() {
+  const now = Date.now();
+  if (now - lastTap < 600) return;
+  lastTap = now;
+  isListening ? stopListening() : startListening();
+}
+
+function mkRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const r = new SR();
+  r.continuous = false; r.interimResults = true; r.lang = 'en-US';
+  return r;
+}
+
+function startListening() {
+  if (!micGranted || !supported) return;
+  isListening = true;
+  accumulated = answers[STAGES[step].id] || '';
+  if (transcriptEl) transcriptEl.textContent = accumulated;
+  if (interimEl) interimEl.textContent = '';
+
+  const vb=document.getElementById('vbtn'), vt=document.getElementById('vbtxt'),
+        wv=document.getElementById('wv'), tw=document.getElementById('twrap'),
+        tf=document.getElementById('tfill'), tc=document.getElementById('tcnt');
+  if(vb) vb.classList.add('listening');
+  if(vt) vt.textContent='Tap to stop';
+  if(wv) wv.style.display='flex';
+  if(tw) tw.style.display='block';
+
+  let sec=REC_SEC;
+  if(tc) tc.textContent=sec+'s';
+  if(tf){tf.style.transition='none';tf.style.width='100%';}
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    if(tf){tf.style.transition=`width ${REC_SEC}s linear`;tf.style.width='0%';}
+  }));
+  timerIv=setInterval(()=>{sec--;if(tc)tc.textContent=sec+'s';if(sec<=0)stopListening();},1000);
+  timerTo=setTimeout(stopListening,REC_SEC*1000);
+  launchRec();
+}
+
+function launchRec() {
+  recognition = mkRec();
+  recognition.onresult = (e) => {
+    let fin='',int='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal) fin+=e.results[i][0].transcript+' ';
+      else int=e.results[i][0].transcript;
+    }
+    if(fin) accumulated+=fin;
+    if(transcriptEl) transcriptEl.textContent = accumulated;
+    if(interimEl) interimEl.textContent = int;
+  };
+  recognition.onend = ()=>{ if(isListening) setTimeout(()=>{ if(isListening) try{launchRec();}catch(e){stopListening();} },200); };
+  recognition.onerror = (e)=>{ if(!isListening) return; if(e.error==='no-speech'||e.error==='aborted') setTimeout(()=>{ if(isListening) try{launchRec();}catch(er){stopListening();} },200); else stopListening(); };
+  try{recognition.start();}catch(e){stopListening();}
+}
+
+function stopListening() {
+  if(!isListening) return;
+  isListening=false;
+  clearInterval(timerIv); clearTimeout(timerTo);
+  try{recognition.abort();}catch(e){}
+  if(transcriptEl) answers[STAGES[step].id]=transcriptEl.textContent.trim();
+  if(interimEl) interimEl.textContent='';
+  const vb=document.getElementById('vbtn'),vt=document.getElementById('vbtxt'),
+        wv=document.getElementById('wv'),tw=document.getElementById('twrap');
+  if(vb) vb.classList.remove('listening');
+  if(vt) vt.textContent='Tap to speak';
+  if(wv) wv.style.display='none';
+  if(tw) tw.style.display='none';
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────
+function isSecondaryOnCall() {
+  return answers['shift_nature'] === STAGES[2].options[4];
+}
+function disruptionRequired() {
+  return answers['disruption'] !== STAGES[1].options[0] ||
+         answers['shift_nature'] !== STAGES[2].options[0];
+}
+
+function goNext() {
+  if(isListening) stopListening();
+  commitCurrentStep();
+
+  // Step 2: skip secondary on-call step (3) if not secondary on-call
+  if(step === 2 && !isSecondaryOnCall()) {
+    answers['oncall_hours'] = '';
+    step += 2; renderStage(); scrollTop(); return;
+  }
+
+  // Step 4: block if disruption explanation required but empty
+  if(step === 4 && disruptionRequired()) {
+    const note = (answers['disruption_notes'] || '').trim();
+    if (!note) {
+      const el = document.getElementById('tdisp');
+      if(el){ el.style.border='2px solid var(--red)'; setTimeout(()=>{ el.style.border=''; },1800); }
+      return;
+    }
+  }
+
+  // Step 11: skip baseline notes (12) if no changes
+  if(step === 11 && answers['baseline_change'] === STAGES[11].options[0]) {
+    answers['baseline_notes'] = '';
+    step += 2; renderStage(); scrollTop(); return;
+  }
+
+  // Step 13: skip safety notes (15) if no concern
+  if(step === 13 && answers['safety_flag'] === 'No') {
+    answers['safety_notes'] = '';
+    step += 2; renderStage(); scrollTop(); return;
+  }
+
+  // Step 16: skip transport details (17) if no transport
+  if(step === 16 && answers['transport'] === 'No') {
+    answers['mileage']='0'; answers['reimbursable_amt']='0'; answers['reimbursable_desc']='';
+    step += 2; renderStage(); scrollTop(); return;
+  }
+
+  if(step < TOTAL-1){ step++; renderStage(); scrollTop(); }
+  else renderReview();
+}
+
+function goBack() {
+  if(isListening) stopListening();
+  commitCurrentStep();
+  if(step > 0){ step--; renderStage(); scrollTop(); }
+}
+
+function scrollTop() {
+  document.querySelector('.scroll-area').scrollTo({top:0,behavior:'smooth'});
+}
+
+function commitCurrentStep() {
+  const s = STAGES[step];
+  if(s.type==='voice' && transcriptEl) answers[s.id]=transcriptEl.textContent.trim();
+  if(s.type==='select+inputs') {
+    s.fields.forEach(f=>{ const el=document.getElementById(f.id); if(el) answers[f.id]=el.value; });
+  }
+  if(s.type==='inputs') {
+    s.fields.forEach(f=>{ const el=document.getElementById(f.id); if(el) answers[f.id]=el.value; });
+  }
+}
+
+// ── REVIEW ────────────────────────────────────────────────────────
+function renderReview() {
+  setPct(TOTAL);
+  const fmt = (val) => {
+    if (!val || val === '' || val === 'undefined') return '<em style="color:var(--muted)">Not provided</em>';
+    if (Array.isArray(val)) return val.join(', ');
+    return val;
+  };
+
+  const rows = STAGES.filter(s=>s.type!=='attest').map((s,i)=>{
+    let qLabel='', aVal='';
+    if(s.type==='select+inputs'||s.type==='inputs'){
+      const parts = s.fields.map(f=>`<div class="review-q">${f.label}</div><div class="review-a">${fmt(answers[f.id])}</div>`).join('');
+      return `<div class="review-card"><div class="review-section">${s.section}<button class="review-edit" onclick="jumpTo(${i})">Edit</button></div>${parts}</div>`;
+    }
+    qLabel = s.q; aVal = fmt(answers[s.id]);
+    return `<div class="review-card"><div class="review-section">${s.section}<button class="review-edit" onclick="jumpTo(${i})">Edit</button></div><div class="review-q">${qLabel}</div><div class="review-a">${aVal}</div></div>`;
+  }).join('');
+
+  document.getElementById('root').innerHTML = `
+    <div style="padding:18px 0 6px;animation:up 0.3s ease;">
+      <div style="font-family:'Fraunces',serif;font-size:22px;margin-bottom:4px;">Review Notes</div>
+      <div style="font-size:12px;color:var(--muted);">Check everything before submitting.</div>
+    </div>
+    ${rows}
+    <button class="submit-btn" onclick="submitNotes()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Submit Visit Note
+    </button>`;
+}
+
+function jumpTo(i) { step=i; renderStage(); scrollTop(); }
+
+// ── SUBMIT ────────────────────────────────────────────────────────
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqPtx7KRwWPTJX1w_W-C3otIgAy03Uy_w5mMfyu9ejUC6yfSgmw_xjCmjCIhjic1PzGg/exec';
+
+function submitNotes() {
+  const row = [
+    new Date().toISOString(),
+    caregiverEmail || '',
+    answers['client'] || '',
+    caregiverName || '',
+    answers['visit_date'] || '',
+    answers['shift_start'] || '',
+    answers['time_in'] || '',
+    answers['time_out'] || '',
+    answers['disruption'] || '',
+    answers['shift_nature'] || '',
+    answers['oncall_hours'] || '',
+    answers['disruption_notes'] || '',
+    Array.isArray(answers['services']) ? answers['services'].join(', ') : (answers['services'] || ''),
+    answers['engagement'] || '',
+    answers['small_detail'] || '',
+    '',
+    answers['reimbursable_desc'] || '',
+    answers['reimbursable_amt'] || '',
+    answers['emotional'] || '',
+    answers['mobility'] || '',
+    answers['nutrition'] || '',
+    answers['baseline_change'] || '',
+    answers['baseline_notes'] || '',
+    answers['safety_flag'] || '',
+    Array.isArray(answers['env_factors']) ? answers['env_factors'].join(', ') : (answers['env_factors'] || ''),
+    answers['safety_notes'] || '',
+    answers['transport'] || '',
+    answers['mileage'] || '',
+    answers['team_notes'] || '',
+    answers['next_caregiver'] || '',
+    answers['wins'] || '',
+    answers['attest'] ? 'I confirm this note is accurate, objective, and complete.' : ''
+  ];
+
+  document.getElementById('root').innerHTML = `
+    <div style="text-align:center;padding:60px 20px;">
+      <div style="font-size:40px;margin-bottom:16px;">⏳</div>
+      <div style="font-family:'Fraunces',serif;font-size:20px;margin-bottom:8px;">Submitting…</div>
+      <div style="font-size:13px;color:var(--muted);">Just a moment.</div>
+    </div>`;
+
+  fetch(SCRIPT_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({row})
+  })
+  .then(()=>showSuccess())
+  .catch(()=>{
+    document.getElementById('root').innerHTML=`
+      <div style="text-align:center;padding:60px 20px;">
+        <div style="font-size:40px;margin-bottom:16px;">⚠️</div>
+        <div style="font-family:'Fraunces',serif;font-size:20px;margin-bottom:8px;">Submission Failed</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:24px;">Check your connection and try again.</div>
+        <button class="btn-new" onclick="submitNotes()">Retry</button>
+      </div>`;
+  });
+}
+
+function showSuccess() {
+  setPct(TOTAL);
+  document.getElementById('pFill').style.background='var(--moss)';
+  document.getElementById('root').innerHTML=`
+    <div class="success">
+      <div class="success-ring">✓</div>
+      <h2>Note Submitted</h2>
+      <p>Great work today, ${caregiverName.split(' ')[0]}.<br>Visit note for <strong>${answers['client']||'your client'}</strong> has been recorded.</p>
+      <button class="btn-new" onclick="startNew()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Start New Note
+      </button>
+    </div>`;
+}
+
+function startNew() {
+  answers={caregiver_name:caregiverName, visit_date:today()};
+  step=0;
+  document.getElementById('pFill').style.cssText='width:0%;background:linear-gradient(90deg,var(--moss),var(--gold-light))';
+  renderStage();
+  scrollTop();
+}
+</script>
+</body>
+</html>
