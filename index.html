@@ -1,1030 +1,857 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CareNote — DGCS</title>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;1,300&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --ink:#1A1A18; --paper:#F5F0E8; --card:#FDFAF4;
-  --moss:#5C7A5E; --moss-light:#8FAF91; --moss-dark:#3D5C3F;
-  --gold:#B8860B; --gold-light:#E8C84A; --gold-pale:#FBF3D5;
-  --red:#B83232; --red-light:rgba(184,50,50,0.08);
-  --muted:#8A8478; --border:#DDD8CC; --shadow:rgba(26,26,24,0.07);
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;overflow:hidden;}
-body{font-family:'Outfit',sans-serif;background:var(--paper);color:var(--ink);display:flex;flex-direction:column;}
+/**
+ * DISCOVER GREEN CARE — AUTOMATED INVOICE, PAYSTUB & RECEIPT SCRIPT
+ * Version 5.0 — With Receipt Upload & Auto Folder Creation
+ *
+ * WHAT'S NEW IN V5:
+ * ✓ Accepts receipt photo uploads from KinCareNote
+ * ✓ Auto-creates client folder structure in Google Drive if missing
+ * ✓ Folder structure: My Drive > Clients > [Client Name] > [Client Name - Receipts] > [date range]
+ * ✓ Week folders named M/DD-DD/YYYY (same month) or M/DD-M/DD/YYYY (cross-month)
+ * ✓ Two endpoints: doPost handles both note submissions and receipt uploads
+ *
+ * SETUP:
+ * 1. Open your Google Sheet → Extensions → Apps Script
+ * 2. Replace all existing code with this script
+ * 3. Save (Ctrl+S)
+ * 4. Run setupTrigger once to activate form trigger
+ * 5. Deploy → New deployment → Web app → Execute as Me → Anyone → Deploy
+ * 6. Copy the Web App URL → paste into KinCareNote where indicated
+ *
+ * DRIVE FOLDER STRUCTURE CREATED AUTOMATICALLY:
+ * My Drive > Clients > Gloria Marlow > Gloria Marlow - Receipts > 4/12-18/2026
+ */
 
-/* ── HEADER ── */
-.header{background:var(--ink);padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-.header-left{display:flex;align-items:baseline;gap:8px;}
-.logo{font-family:'Fraunces',serif;font-size:20px;color:var(--paper);letter-spacing:-0.3px;}
-.logo-sub{font-size:11px;color:var(--moss-light);font-weight:500;letter-spacing:1.5px;text-transform:uppercase;}
-.caregiver-pill{background:rgba(255,255,255,0.08);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--moss-light);cursor:pointer;border:1px solid rgba(255,255,255,0.12);}
+// ─────────────────────────────────────────────────────────
+// CONFIGURATION
+// ─────────────────────────────────────────────────────────
+const CONFIG = {
+  FORM_RESPONSES_SHEET:      "Form Responses 1",
+  INVOICE_TEMPLATE_SHEET:    "Invoice Template",
+  PAYSTUB_TEMPLATE_SHEET:    "Paystub Template",
+  CLIENT_DIRECTORY_SHEET:    "Client Directory",
+  CAREGIVER_DIRECTORY_SHEET: "Caregiver Directory",
 
-/* ── PROGRESS ── */
-.progress-track{height:2px;background:var(--border);flex-shrink:0;}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--moss),var(--gold-light));transition:width 0.4s ease;}
+  // Google Drive folder name containing all client folders
+  CLIENTS_ROOT_FOLDER:       "Clients",
 
-/* ── SCROLL AREA ── */
-.scroll-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 40px;}
+  OWNER_CAREGIVERS: [
+    "Kinsey Davis",
+    "Denzel Davis"
+  ],
 
-/* ── STAGE LABEL ── */
-.stage-label{display:flex;align-items:center;gap:8px;padding:18px 0 6px;}
-.stage-num{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;}
-.stage-dots{display:flex;gap:3px;flex:1;}
-.sdot{height:3px;flex:1;border-radius:2px;background:var(--border);transition:background 0.3s;}
-.sdot.done{background:var(--moss);}
-.sdot.active{background:var(--gold);}
-
-/* ── CARD ── */
-.card{background:var(--card);border-radius:14px;padding:20px;border:1px solid var(--border);box-shadow:0 1px 8px var(--shadow);margin-bottom:12px;animation:up 0.3s ease;}
-@keyframes up{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
-.card-section{font-size:10px;font-weight:600;color:var(--moss-dark);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;}
-.card-q{font-family:'Fraunces',serif;font-size:20px;line-height:1.3;margin-bottom:4px;}
-.card-hint{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:16px;}
-
-/* ── SPEAK BTN ── */
-.speak-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--moss);font-family:'Outfit',sans-serif;font-size:11px;font-weight:500;cursor:pointer;padding:0;margin-bottom:10px;touch-action:manipulation;}
-
-/* ── VOICE BTN ── */
-.voice-btn{width:100%;padding:16px;border-radius:12px;border:2px solid var(--moss);background:transparent;color:var(--moss-dark);font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;user-select:none;}
-.voice-btn.listening{border-color:var(--red);background:var(--red-light);color:var(--red);animation:pulse 1.5s ease infinite;}
-.voice-btn:disabled{opacity:0.35;}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(184,50,50,0.25);}50%{box-shadow:0 0 0 7px rgba(184,50,50,0);}}
-.wave{display:flex;align-items:center;gap:2px;height:16px;}
-.wb{width:3px;background:var(--red);border-radius:2px;animation:wv 0.7s ease infinite;}
-.wb:nth-child(2){animation-delay:0.1s}.wb:nth-child(3){animation-delay:0.2s}.wb:nth-child(4){animation-delay:0.3s}.wb:nth-child(5){animation-delay:0.4s}
-@keyframes wv{0%,100%{height:3px}50%{height:14px}}
-
-/* ── TIMER ── */
-.timer-wrap{margin-top:8px;display:none;}
-.timer-row{font-size:11px;color:var(--red);font-weight:500;display:flex;justify-content:space-between;margin-bottom:4px;}
-.timer-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
-.timer-fill{height:100%;background:var(--red);width:100%;}
-
-/* ── TRANSCRIPT ── */
-.transcript-wrap{margin-top:10px;}
-.transcript{min-height:64px;background:var(--paper);border-radius:8px;padding:12px;border:1px solid var(--border);font-size:13px;line-height:1.6;color:var(--ink);outline:none;width:100%;}
-.transcript:empty:before{content:attr(data-ph);color:var(--muted);}
-.interim{font-size:12px;color:var(--muted);font-style:italic;min-height:18px;margin-top:4px;padding:0 2px;}
-.status-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:10px;}
-.status-badge.ok{background:rgba(92,122,94,0.12);color:var(--moss-dark);}
-.status-badge.no{background:rgba(138,132,120,0.1);color:var(--muted);}
-
-/* ── SELECT / INPUT ── */
-.field-select{width:100%;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);font-family:'Outfit',sans-serif;font-size:15px;color:var(--ink);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A8478' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;cursor:pointer;}
-.field-input{width:100%;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);font-family:'Outfit',sans-serif;font-size:15px;color:var(--ink);outline:none;}
-.field-input:focus,.field-select:focus{border-color:var(--moss);outline:none;}
-.lock-badge{display:inline-flex;align-items:center;gap:4px;background:var(--gold-pale);color:var(--gold);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;margin-bottom:8px;}
-
-/* ── RADIO / CHECK GROUPS ── */
-.radio-group,.check-group{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
-.radio-opt,.check-opt{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;touch-action:manipulation;transition:all 0.15s;}
-.radio-opt.selected,.check-opt.selected{border-color:var(--moss);background:rgba(92,122,94,0.07);}
-.radio-circle{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
-.radio-opt.selected .radio-circle{border-color:var(--moss);background:var(--moss);}
-.radio-dot{width:7px;height:7px;border-radius:50%;background:white;}
-.check-box{width:18px;height:18px;border-radius:4px;border:2px solid var(--border);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
-.check-opt.selected .check-box{border-color:var(--moss);background:var(--moss);}
-.check-mark{color:white;font-size:11px;font-weight:700;}
-.opt-text{font-size:13px;line-height:1.4;flex:1;}
-
-/* ── TIME ROW ── */
-.time-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.time-field label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:5px;}
-
-/* ── ACTIONS ── */
-.actions{display:flex;gap:8px;margin-top:14px;}
-.btn-back{flex:1;padding:13px;border-radius:10px;border:1.5px solid var(--border);background:transparent;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;touch-action:manipulation;}
-.btn-next{flex:2;padding:13px;border-radius:10px;border:none;background:var(--ink);font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;color:var(--paper);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation;}
-.btn-next:disabled{opacity:0.35;}
-
-/* ── REVIEW ── */
-.review-card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid var(--border);}
-.review-section{font-size:10px;font-weight:700;color:var(--moss-dark);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
-.review-q{font-size:11px;color:var(--muted);margin-bottom:2px;}
-.review-a{font-size:13px;color:var(--ink);line-height:1.5;}
-.review-edit{float:right;background:none;border:none;color:var(--moss);font-size:11px;font-weight:500;cursor:pointer;font-family:'Outfit',sans-serif;}
-.submit-btn{width:100%;padding:16px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--moss-dark),var(--moss));font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;color:white;cursor:pointer;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
-
-/* ── SUCCESS ── */
-.success{text-align:center;padding:50px 20px;animation:up 0.35s ease;}
-.success-ring{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--moss-dark),var(--moss));display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:34px;}
-.success h2{font-family:'Fraunces',serif;font-size:26px;margin-bottom:8px;}
-.success p{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:28px;}
-.btn-new{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:var(--paper);border:none;padding:14px 26px;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;touch-action:manipulation;}
-
-/* ── PERM SCREEN ── */
-.perm-screen{padding:50px 20px;text-align:center;animation:up 0.3s ease;}
-.perm-icon{width:72px;height:72px;background:var(--ink);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:30px;}
-.perm-screen h2{font-family:'Fraunces',serif;font-size:24px;margin-bottom:8px;}
-.perm-screen p{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:24px;}
-.perm-btn{width:100%;padding:16px;border-radius:12px;border:none;background:var(--ink);color:var(--paper);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
-.perm-err{background:var(--red-light);border:1px solid var(--red);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--red);margin-top:12px;line-height:1.5;display:none;}
-.perm-skip{margin-top:12px;background:none;border:none;color:var(--muted);font-family:'Outfit',sans-serif;font-size:12px;text-decoration:underline;cursor:pointer;display:block;width:100%;text-align:center;touch-action:manipulation;}
-
-/* ── RECEIPT UPLOAD ── */
-.receipt-add-btn{width:100%;padding:14px;border-radius:11px;border:2px dashed var(--border);background:transparent;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;color:var(--moss-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;margin-top:4px;}
-.receipt-add-btn:active{background:rgba(92,122,94,0.07);}
-.receipt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
-.receipt-thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--border);}
-.receipt-thumb img{width:100%;height:100%;object-fit:cover;}
-.receipt-thumb .rt-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);font-size:20px;}
-.receipt-thumb .rt-remove{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:var(--red);border:none;color:white;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
-.receipt-count{font-size:12px;color:var(--moss-dark);font-weight:600;margin-top:8px;text-align:center;}
-
-/* ── NAME SETUP ── */
-.name-setup{padding:40px 20px;animation:up 0.3s ease;}
-.name-setup h2{font-family:'Fraunces',serif;font-size:24px;margin-bottom:6px;}
-.name-setup p{color:var(--muted);font-size:13px;margin-bottom:20px;}
-.name-setup-btn{width:100%;padding:15px;border-radius:12px;border:none;background:var(--ink);color:var(--paper);font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;touch-action:manipulation;}
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="header-left">
-    <span class="logo">CareNote</span>
-    <span class="logo-sub">DGCS</span>
-  </div>
-  <div class="caregiver-pill" id="cgPill" onclick="resetCaregiver()" style="display:none"></div>
-</div>
-<div class="progress-track"><div class="progress-fill" id="pFill" style="width:0%"></div></div>
-<div class="scroll-area" id="root"></div>
-
-<script>
-// ── STATE ──────────────────────────────────────────────────────────
-const CLIENTS = ['Select client…','Gloria Marlow'];
-let caregiverName  = localStorage.getItem('dgcs_cg') || '';
-let caregiverEmail = localStorage.getItem('dgcs_cg_email') || '';
-let answers = {};
-let step = 0;
-let micGranted = false;
-let isListening = false;
-let recognition = null, timerIv = null, timerTo = null;
-let accumulated = '';
-let transcriptEl = null, interimEl = null;
-const REC_SEC = 45;
-const supported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-
-// ── STAGES ────────────────────────────────────────────────────────
-// Each stage = one card. Type: voice | radio | check | select | inputs | attest
-const STAGES = [
-  // 0 — Visit Details
-  { section:'Visit Details', type:'select+inputs',
-    fields:[
-      {id:'client',      label:'Client Name',              type:'select', options:CLIENTS, tapOnly:true},
-      {id:'visit_date',  label:'Date of Visit',            type:'date'},
-      {id:'shift_start', label:'Scheduled Shift Start Time', type:'time'},
-      {id:'time_in',     label:'Actual Time In',           type:'time'},
-      {id:'time_out',    label:'Actual Time Out',          type:'time'},
-    ],
-    q:'Who did you see today, and when?',
-    hint:'Select the client. Date defaults to today — adjust if needed.'
+  CLIENT_INVOICE_START: {
+    "Gloria Marlow": 9
   },
-  // 1
-  { section:'Visit Details', type:'radio', id:'disruption', required:true,
-    q:'Did this visit occur without any disruption to the originally scheduled care window?',
-    hint:'One tap.',
-    options:['Yes — occurred as scheduled','Started late (with or without time made up)','Ended early','Ended late','Interrupted / partial coverage']
-  },
-  // 2
-  { section:'Visit Details', type:'radio', id:'shift_nature', required:true,
-    q:'What was the nature of this shift?',
-    hint:'One tap.',
-    options:['Regularly scheduled shift','Planned coverage — more than 24 hours notice','Activation — less than 24 hours notice, requires admin approval','Emergency — same-day request OR request during a scheduled shift','Secondary on-call — not activated (stipend only)']
-  },
-  // 3 — secondary on-call only (skipped otherwise)
-  { section:'Secondary On-Call Details', type:'inputs',
-    fields:[
-      {id:'oncall_hours', label:'Scheduled shift length in hours', type:'text', placeholder:'e.g. 8', optional:true},
-    ],
-    q:'If secondary on-call (not activated), what was the scheduled shift length in hours?',
-    hint:'Enter the number of hours for the on-call shift.'
-  },
-  // 4 — disruption explanation (required if disrupted or non-standard; skipped if all clear)
-  { section:'Service Disruption Explanation', type:'voice', id:'disruption_notes',
-    q:'If there was any disruption, briefly explain what happened and whether total hours were adjusted.',
-    hint:'Required if visit was disrupted or this is a non-standard shift. Speak freely.',
-    optional:true
-  },
-  // 5
-  { section:'Care Provided', type:'check', id:'services', required:true,
-    q:'Services Provided',
-    hint:'Tap all that apply.',
-    options:['Companionship / conversation','Personal care assistance','Meal preparation / assistance','Light housekeeping','Laundry','Transportation / escort','Appointment accompaniment','Errands','Safety supervision','Other']
-  },
-  // 6
-  { section:'Care Provided', type:'voice', id:'engagement',
-    q:'How did you meaningfully engage with the client during this visit?',
-    hint:'Examples: conversation, shared activities, routines supported, reassurance provided, moments of connection.',
-    optional:false
-  },
-  // 7
-  { section:'Care Provided', type:'voice', id:'small_detail',
-    q:'One small detail that mattered today…',
-    hint:'Optional but encouraged. Even something small counts.',
-    optional:true
-  },
-  // 8
-  { section:'Client Status & Changes', type:'radio', id:'emotional', required:true,
-    q:'How did the client seem emotionally today?',
-    hint:'One tap.',
-    options:['Baseline / typical','More positive than usual','More withdrawn than usual','Anxious / distressed','Irritable / agitated']
-  },
-  // 9
-  { section:'Client Status & Changes', type:'radio', id:'mobility', required:true,
-    q:'How did the client move and navigate their space today?',
-    hint:'One tap.',
-    options:['Baseline','Slightly less steady than usual','Significantly less steady than usual','Needed more hands-on support than usual']
-  },
-  // 10
-  { section:'Client Status & Changes', type:'radio', id:'nutrition', required:true,
-    q:'How did eating/hydration go today (if applicable)?',
-    hint:'One tap.',
-    options:['Baseline / typical','Ate/drank less than usual','Refused meals / low intake','Not applicable']
-  },
-  // 11
-  { section:'Client Status & Changes', type:'radio', id:'baseline_change', required:true,
-    q:'Did you notice anything different compared to the client\'s usual baseline or routine today?',
-    hint:'One tap.',
-    options:['No changes noted','Yes — small change','Yes — meaningful change']
-  },
-  // 12 — skipped if baseline_change = "No changes noted"
-  { section:'Client Status & Changes', type:'voice', id:'baseline_notes',
-    q:'If yes, describe what you observed…',
-    hint:'Objective, factual — no diagnosis.',
-    optional:true
-  },
-  // 13
-  { section:'Safety & Environment', type:'radio', id:'safety_flag', required:true,
-    q:'Did anything today feel unsafe, concerning, or worth noting for awareness?',
-    hint:'One tap.',
-    options:['No','Yes — near miss / concern','Yes — incident occurred (complete Incident Report too)']
-  },
-  // 14
-  { section:'Safety & Environment', type:'check', id:'env_factors', required:true,
-    q:'Did anything in the environment affect the quality or safety of care today?',
-    hint:'Tap all that apply. Tap None if clear.',
-    options:['Smoke exposure (active smoking during visit)','Heavy smoke odor residue impacting comfort','Clutter / fall risk','Pets interfering with care','Unclear supplies / missing equipment','Family dynamics impacting care','None','Other']
-  },
-  // 15 — skipped if safety_flag = "No"
-  { section:'Safety & Environment', type:'voice', id:'safety_notes',
-    q:'If yes, describe briefly.',
-    hint:'Objective only.',
-    optional:true
-  },
-  // 16
-  { section:'Appointments & Transportation', type:'radio', id:'transport', required:true,
-    q:'Was transportation provided during this visit?',
-    hint:'One tap.',
-    options:['No','Yes — client vehicle','Yes — caregiver vehicle (authorized)']
-  },
-  // 17 — skipped if transport = "No"
-  { section:'Appointments & Transportation', type:'inputs',
-    fields:[
-      {id:'mileage',          label:'Reimbursable Mileage (while with client, no commute)', type:'number', placeholder:'0',    optional:true},
-      {id:'reimbursable_desc',label:'Description of Reimbursable Purchases',                type:'text',   placeholder:'e.g. parking, activity supplies', optional:true},
-      {id:'reimbursable_amt', label:'Total Reimbursables Amount ($)',                       type:'number', placeholder:'0.00', optional:true},
-    ],
-    q:'Mileage and reimbursables',
-    hint:'Leave at 0 or blank if none.'
-  },
-  // 18
-  { section:'Follow-up & Handoff', type:'voice', id:'team_notes',
-    q:'Is there anything the care team or admin should know to better support this client?',
-    hint:'Optional but encouraged.',
-    optional:true
-  },
-  // 19
-  { section:'Follow-up & Handoff', type:'voice', id:'next_caregiver',
-    q:'What would be helpful for the next caregiver to know to ensure continuity and comfort?',
-    hint:'Routines, preferences, reminders, supplies running low, schedule notes, changes to be aware of.',
-    optional:true
-  },
-  // 20
-  { section:'Follow-up & Handoff', type:'voice', id:'wins',
-    q:'Was there anything today that felt especially successful or worth carrying forward?',
-    hint:'Optional.',
-    optional:true
-  },
-  // 21
-  { section:'Attestation', type:'attest', id:'attest',
-    q:'Caregiver Attestation', hint:''
-  }
-];
 
-const TOTAL = STAGES.length;
+  BILLING_RATES: {
+    "companion":   35.00,
+    "personal":    38.00,
+    "specialized": 42.00,
+    "cognitive":   42.00,
+    "default":     35.00
+  },
 
-// ── BOOT ──────────────────────────────────────────────────────────
-window.addEventListener('load', () => {
-  if (navigator.permissions) {
-    navigator.permissions.query({name:'microphone'}).then(r => {
-      if (r.state === 'granted') { micGranted = true; boot(); }
-      else showPerm();
-    }).catch(() => showPerm());
-  } else showPerm();
-});
+  RETAINER_RATES: {
+    tier1_hours: 24,
+    tier1_rate:  15.00,
+    tier2_hours: 24,
+    tier2_rate:  10.00,
+    tier3_rate:   7.00
+  },
 
-function boot() {
-  if (!caregiverName) { showNameSetup(); return; }
-  document.getElementById('cgPill').style.display = 'block';
-  document.getElementById('cgPill').textContent = caregiverName;
-  answers = { caregiver_name: caregiverName, visit_date: today() };
-  step = 0;
-  renderStage();
-}
+  ACTIVATION_PREMIUM:     2.00,
+  EMERGENCY_PREMIUM:      4.00,
+  ONCALL_STIPEND:         8.00,
+  ONCALL_EXPOSURE_RATE:   2.00,
+  MILEAGE_RATE:           0.67,
+  BILLING_EMAIL:          "hello@discovergreencare.com"
+};
 
-function today() {
-  const d = new Date();
-  return d.toISOString().split('T')[0];
-}
+// ─────────────────────────────────────────────────────────
+// COLUMN MAPPING
+// ─────────────────────────────────────────────────────────
+const COL = {
+  TIMESTAMP:          0,
+  EMAIL:              1,
+  CLIENT_NAME:        2,
+  CAREGIVER_NAME:     3,
+  DATE_OF_VISIT:      4,
+  SCHEDULED_START:    5,
+  ACTUAL_TIME_IN:     6,
+  ACTUAL_TIME_OUT:    7,
+  DISRUPTION_TYPE:    8,
+  SHIFT_NATURE:       9,
+  ONCALL_HOURS:       10,
+  DISRUPTION_EXPLAIN: 11,
+  SERVICES_PROVIDED:  12,
+  ENGAGEMENT_NOTES:   13,
+  SMALL_DETAIL:       14,
+  REIMBURSABLE_FILES: 15,
+  REIMB_DESCRIPTION:  16,
+  REIMB_AMOUNT:       17,
+  EMOTIONAL_STATUS:   18,
+  MOBILITY_STATUS:    19,
+  EATING_STATUS:      20,
+  CHANGES_NOTED:      21,
+  CHANGES_DESCRIBE:   22,
+  SAFETY_CONCERN:     23,
+  ENVIRONMENT_ISSUES: 24,
+  ENVIRONMENT_DETAIL: 25,
+  TRANSPORTATION:     26,
+  MILEAGE:            27,
+  CARE_TEAM_NOTES:    28,
+  NEXT_CAREGIVER:     29,
+  SUCCESSFUL_NOTES:   30,
+  ATTESTATION:        31
+};
 
-// ── PERM ──────────────────────────────────────────────────────────
-function showPerm() {
-  document.getElementById('root').innerHTML = `
-    <div class="perm-screen">
-      <div class="perm-icon">🎙️</div>
-      <h2>Microphone Access</h2>
-      <p>CareNote uses your microphone so you can dictate visit notes hands-free on the drive home.</p>
-      <button class="perm-btn" id="permBtn" onclick="reqMic()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10a7 7 0 0 1-14 0M12 19v3M8 22h8"/></svg>
-        Allow Microphone & Continue
-      </button>
-      <div class="perm-err" id="permErr"></div>
-      <button class="perm-skip" onclick="skipMic()">Continue without voice (type only)</button>
-    </div>`;
-}
-
-async function reqMic() {
-  const btn = document.getElementById('permBtn'), err = document.getElementById('permErr');
-  btn.textContent = 'Requesting…'; btn.disabled = true; err.style.display = 'none';
+// ─────────────────────────────────────────────────────────
+// WEB APP ENTRY POINT
+// Handles both note submissions and receipt uploads
+// ─────────────────────────────────────────────────────────
+function doPost(e) {
   try {
-    await navigator.mediaDevices.getUserMedia({audio:true});
-    micGranted = true; boot();
-  } catch(e) {
-    btn.textContent = 'Allow Microphone & Continue'; btn.disabled = false;
-    err.style.display = 'block';
-    err.innerHTML = e.name === 'NotAllowedError'
-      ? '❌ Blocked. Tap the lock icon in Chrome\'s address bar → Site Settings → Microphone → Allow, then reload.'
-      : `❌ ${e.message}`;
-  }
-}
-function skipMic() { micGranted = false; boot(); }
+    const data = JSON.parse(e.postData.contents);
 
-// ── NAME SETUP ─────────────────────────────────────────────────────
-function showNameSetup() {
-  document.getElementById('root').innerHTML = `
-    <div class="name-setup">
-      <h2>Welcome to CareNote</h2>
-      <p>We'll remember your details so you never have to enter them again.</p>
-      <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:6px;">Your Full Name</label>
-      <input class="field-input" id="cgInput" type="text" placeholder="First and last name" autocomplete="name" style="margin-bottom:12px;">
-      <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:6px;">Your Work Email</label>
-      <input class="field-input" id="cgEmail" type="email" placeholder="you@discovergreencare.com" autocomplete="email" style="margin-bottom:4px;">
-      <p style="font-size:11px;color:var(--muted);margin-bottom:16px;">Used for record-keeping only.</p>
-      <button class="name-setup-btn" onclick="saveName()">Save & Start Notes →</button>
-    </div>`;
-  setTimeout(() => document.getElementById('cgInput').focus(), 300);
-}
-
-function saveName() {
-  const val   = document.getElementById('cgInput').value.trim();
-  const email = document.getElementById('cgEmail') ? document.getElementById('cgEmail').value.trim() : '';
-  if (!val) return;
-  caregiverName  = val;
-  caregiverEmail = email;
-  localStorage.setItem('dgcs_cg', val);
-  localStorage.setItem('dgcs_cg_email', email);
-  boot();
-}
-
-function resetCaregiver() {
-  if (!confirm('Change caregiver name or email?')) return;
-  localStorage.removeItem('dgcs_cg');
-  localStorage.removeItem('dgcs_cg_email');
-  caregiverName = ''; caregiverEmail = '';
-  showNameSetup();
-}
-
-// ── RENDER ────────────────────────────────────────────────────────
-function setPct(n) { document.getElementById('pFill').style.width = (n/TOTAL*100)+'%'; }
-
-function dotsHTML() {
-  return STAGES.map((_,i) => `<div class="sdot ${i<step?'done':i===step?'active':''}"></div>`).join('');
-}
-
-function renderStage() {
-  if (isListening) stopListening();
-  transcriptEl = null; interimEl = null;
-  setPct(step);
-  const s = STAGES[step];
-  const root = document.getElementById('root');
-
-  let body = '';
-  if (s.type === 'voice') body = voiceHTML(s);
-  else if (s.type === 'radio') body = radioHTML(s);
-  else if (s.type === 'check') body = checkHTML(s);
-  else if (s.type === 'select+inputs') body = selectInputsHTML(s);
-  else if (s.type === 'inputs') body = inputsHTML(s);
-  else if (s.type === 'attest') body = attestHTML();
-
-  const isFirst = step === 0;
-  const isLast = step === TOTAL - 1;
-  const backBtn = !isFirst ? `<button class="btn-back" onclick="goBack()">← Back</button>` : '';
-  const nextLabel = isLast ? 'Submit' : 'Next →';
-  const nextDis = needsAnswer(s) ? 'disabled' : '';
-
-  root.innerHTML = `
-    <div class="stage-label">
-      <span class="stage-num">${step+1} / ${TOTAL}</span>
-      <div class="stage-dots">${dotsHTML()}</div>
-    </div>
-    <div class="card">
-      <div class="card-section">${s.section}</div>
-      <div class="card-q">${s.q}</div>
-      ${s.hint ? `<p class="card-hint">${s.hint}</p>` : ''}
-      ${body}
-      <div class="actions">
-        ${backBtn}
-        <button class="btn-next" id="nextBtn" onclick="goNext()" ${nextDis}>
-          ${nextLabel}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-      </div>
-    </div>`;
-
-  // Grab direct DOM refs for voice
-  if (s.type === 'voice') {
-    transcriptEl = document.getElementById('tdisp');
-    interimEl = document.getElementById('tint');
-    if (transcriptEl && answers[s.id]) transcriptEl.textContent = answers[s.id];
-  }
-
-  // Set defaults for date/time inputs
-  if (s.type === 'select+inputs') {
-    const dateEl = document.getElementById('visit_date');
-    if (dateEl && !answers['visit_date']) dateEl.value = today();
-    else if (dateEl) dateEl.value = answers['visit_date'] || today();
-    ['shift_start','time_in','time_out'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el && answers[id]) el.value = answers[id];
-    });
-    const cl = document.getElementById('client');
-    if (cl && answers['client']) cl.value = answers['client'];
-  }
-}
-
-// ── NEEDS ANSWER ──────────────────────────────────────────────────
-function needsAnswer(s) {
-  if (s.type === 'attest') return !answers['attest'];
-  if (s.required) {
-    if (s.type === 'radio') return !answers[s.id];
-    if (s.type === 'check') return !answers[s.id] || answers[s.id].length === 0;
-    if (s.type === 'select+inputs') return !answers['client'];
-  }
-  // Voice fields: required if optional===false AND no saved answer yet
-  if (s.type === 'voice' && s.optional === false) {
-    return !(answers[s.id] && answers[s.id].trim());
-  }
-  // Disruption notes: conditionally required based on prior answers
-  if (s.id === 'disruption_notes' && disruptionRequired()) {
-    return !(answers[s.id] && answers[s.id].trim());
-  }
-  return false;
-}
-
-// ── VOICE HTML ────────────────────────────────────────────────────
-function voiceHTML(s) {
-  const saved = answers[s.id] || '';
-  const badge = micGranted
-    ? `<span class="status-badge ok">✓ Microphone ready</span>`
-    : `<span class="status-badge no">Type below</span>`;
-  return `
-    ${badge}
-    <button class="speak-btn" onclick="speakQ(${step})">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-      Read prompt aloud
-    </button>
-    <button class="voice-btn" id="vbtn" onclick="tapVoice()" ${!micGranted?'disabled':''}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10a7 7 0 0 1-14 0M12 19v3M8 22h8"/></svg>
-      <span id="vbtxt">Tap to speak</span>
-      <div class="wave" id="wv" style="display:none"><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div></div>
-    </button>
-    <div class="timer-wrap" id="twrap">
-      <div class="timer-row"><span>Recording — tap to stop</span><span id="tcnt">${REC_SEC}s</span></div>
-      <div class="timer-track"><div class="timer-fill" id="tfill"></div></div>
-    </div>
-    <div class="transcript-wrap">
-      <div class="transcript" id="tdisp" contenteditable="true" data-ph="Your response will appear here…" oninput="onTranscriptInput()">${saved}</div>
-      <div class="interim" id="tint"></div>
-    </div>`;
-}
-
-// ── RADIO HTML ────────────────────────────────────────────────────
-function radioHTML(s) {
-  return `<div class="radio-group" id="rg_${s.id}">` +
-    s.options.map((o,i) => {
-      const sel = answers[s.id] === o ? 'selected' : '';
-      return `<div class="radio-opt ${sel}" onclick="pickRadio('${s.id}','${o.replace(/'/g,"\\'")}',this)">
-        <div class="radio-circle"><div class="radio-dot"></div></div>
-        <span class="opt-text">${o}</span>
-      </div>`;
-    }).join('') + '</div>';
-}
-
-// ── CHECK HTML ────────────────────────────────────────────────────
-function checkHTML(s) {
-  const saved = answers[s.id] || [];
-  return `<div class="check-group" id="cg_${s.id}">` +
-    s.options.map(o => {
-      const sel = saved.includes(o) ? 'selected' : '';
-      return `<div class="check-opt ${sel}" onclick="toggleCheck('${s.id}','${o.replace(/'/g,"\\'")}',this)">
-        <div class="check-box"><span class="check-mark">✓</span></div>
-        <span class="opt-text">${o}</span>
-      </div>`;
-    }).join('') + '</div>';
-}
-
-// ── SELECT+INPUTS HTML ────────────────────────────────────────────
-function selectInputsHTML(s) {
-  let html = '';
-  s.fields.forEach(f => {
-    if (f.type === 'select') {
-      const opts = f.options.map((o,i) => `<option value="${i?o:''}">${o}</option>`).join('');
-      html += `<div style="margin-bottom:12px;">
-        <div class="lock-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Tap only — no voice</div>
-        <select class="field-select" id="${f.id}" onchange="handleSelect('${f.id}',this.value)">${opts}</select>
-      </div>`;
-    } else if (f.type === 'date') {
-      html += `<div style="margin-bottom:12px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
-        <input class="field-input" type="date" id="${f.id}" onchange="handleInput('${f.id}',this.value)" value="${today()}">
-      </div>`;
-    } else if (f.type === 'time') {
-      html += `<div style="margin-bottom:12px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
-        <input class="field-input" type="time" id="${f.id}" onchange="handleInput('${f.id}',this.value)">
-      </div>`;
+    // Route based on request type
+    if (data.type === 'receipt') {
+      return handleReceiptUpload(data);
+    } else {
+      return handleNoteSubmission(data);
     }
+
+  } catch(err) {
+    Logger.log('doPost ERROR: ' + err.toString());
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// HANDLE NOTE SUBMISSION
+// ─────────────────────────────────────────────────────────
+function handleNoteSubmission(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET);
+
+  if (!sheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'Sheet not found' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Convert any 24hr time fields to 12hr before appending
+  const row = data.row;
+  [COL.SCHEDULED_START, COL.ACTUAL_TIME_IN, COL.ACTUAL_TIME_OUT].forEach(i => {
+    if (row[i]) row[i] = to12Hr(row[i].toString());
   });
-  return html;
-}
 
-// ── INPUTS HTML ───────────────────────────────────────────────────
-function inputsHTML(s) {
-  let html = s.fields.map(f => `
-    <div style="margin-bottom:12px;">
-      <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:4px;">${f.label}</label>
-      <input class="field-input" type="${f.type}" id="${f.id}" placeholder="${f.placeholder||''}" value="${answers[f.id]||''}" onchange="handleInput('${f.id}',this.value)">
-    </div>`).join('');
+  // Append the row
+  sheet.appendRow(row);
+  Logger.log('Note submitted: ' + (data.row[2] || '') + ' / ' + (data.row[3] || ''));
 
-  // Add receipt upload button to transport details step
-  if (s.q === 'Mileage and reimbursables') {
-    const hasReceipt = answers['receipt_uploaded'] ? 'uploaded' : '';
-    const receiptLabel = answers['receipt_uploaded']
-      ? '✓ Receipt uploaded — tap to replace'
-      : '📷 Upload Receipt Photo';
-    html += `
-      <div style="margin-top:4px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;display:block;margin-bottom:6px;">Reimbursable Receipts</label>
-        <input type="file" id="receiptFile" accept="image/*,application/pdf,.heic,.heif" style="display:none" onchange="handleReceiptSelected(this)">
-        <div class="receipt-grid" id="receiptGrid"></div>
-        <div class="receipt-count" id="receiptCount"></div>
-        <button class="receipt-add-btn" id="receiptAddBtn" onclick="document.getElementById('receiptFile').click()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          Add Receipt
-        </button>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center;">Optional — tap to add one or more receipt photos</div>
-      </div>`;
-  // Restore any already-uploaded receipt thumbnails
-  setTimeout(() => restoreReceiptGrid(), 50);
-  }
-  return html;
-}
-
-// ── ATTEST HTML ───────────────────────────────────────────────────
-function attestHTML() {
-  const sel = answers['attest'] ? 'selected' : '';
-  return `
-    <div class="check-opt ${sel}" id="attestOpt" onclick="toggleAttest(this)" style="margin-top:4px;">
-      <div class="check-box"><span class="check-mark">✓</span></div>
-      <span class="opt-text" style="font-size:13px;line-height:1.5;">I confirm this note is accurate, objective, and complete to the best of my knowledge.</span>
-    </div>`;
-}
-
-// ── HANDLERS ──────────────────────────────────────────────────────
-function handleSelect(id, val) {
-  answers[id] = val;
-  const nb = document.getElementById('nextBtn');
-  if (nb && id === 'client') nb.disabled = !val;
-}
-
-function handleInput(id, val) { answers[id] = val; }
-
-function pickRadio(id, val, el) {
-  answers[id] = val;
-  document.querySelectorAll(`#rg_${id} .radio-opt`).forEach(e => e.classList.remove('selected'));
-  el.classList.add('selected');
-  const nb = document.getElementById('nextBtn');
-  if (nb) nb.disabled = false;
-}
-
-function toggleCheck(id, val, el) {
-  if (!answers[id]) answers[id] = [];
-  const idx = answers[id].indexOf(val);
-  if (idx > -1) { answers[id].splice(idx,1); el.classList.remove('selected'); }
-  else { answers[id].push(val); el.classList.add('selected'); }
-  const nb = document.getElementById('nextBtn');
-  if (nb) nb.disabled = answers[id].length === 0;
-}
-
-function toggleAttest(el) {
-  answers['attest'] = !answers['attest'];
-  el.classList.toggle('selected', answers['attest']);
-  const nb = document.getElementById('nextBtn');
-  if (nb) nb.disabled = !answers['attest'];
-}
-
-function onTranscriptInput() {
-  // Called when user types directly into the transcript div
-  if (!transcriptEl) return;
-  const val = transcriptEl.textContent.trim();
-  answers[STAGES[step].id] = val;
-  const nb = document.getElementById('nextBtn');
-  if (nb) nb.disabled = needsAnswer(STAGES[step]);
-}
-
-function speakQ(i) {
-  const s = STAGES[i];
-  const synth = window.speechSynthesis;
-  if (!synth) return;
-  synth.cancel();
-  synth.speak(Object.assign(new SpeechSynthesisUtterance(s.q + '. ' + (s.hint||'')), {rate:0.95}));
-}
-
-// ── VOICE RECORDING ───────────────────────────────────────────────
-let lastTap = 0;
-function tapVoice() {
-  const now = Date.now();
-  if (now - lastTap < 600) return;
-  lastTap = now;
-  isListening ? stopListening() : startListening();
-}
-
-function mkRec() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const r = new SR();
-  r.continuous = false; r.interimResults = true; r.lang = 'en-US';
-  return r;
-}
-
-function startListening() {
-  if (!micGranted || !supported) return;
-  isListening = true;
-  accumulated = answers[STAGES[step].id] || '';
-  if (transcriptEl) transcriptEl.textContent = accumulated;
-  if (interimEl) interimEl.textContent = '';
-
-  const vb=document.getElementById('vbtn'), vt=document.getElementById('vbtxt'),
-        wv=document.getElementById('wv'), tw=document.getElementById('twrap'),
-        tf=document.getElementById('tfill'), tc=document.getElementById('tcnt');
-  if(vb) vb.classList.add('listening');
-  if(vt) vt.textContent='Tap to stop';
-  if(wv) wv.style.display='flex';
-  if(tw) tw.style.display='block';
-
-  let sec=REC_SEC;
-  if(tc) tc.textContent=sec+'s';
-  if(tf){tf.style.transition='none';tf.style.width='100%';}
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    if(tf){tf.style.transition=`width ${REC_SEC}s linear`;tf.style.width='0%';}
-  }));
-  timerIv=setInterval(()=>{sec--;if(tc)tc.textContent=sec+'s';if(sec<=0)stopListening();},1000);
-  timerTo=setTimeout(stopListening,REC_SEC*1000);
-  launchRec();
-}
-
-function launchRec() {
-  recognition = mkRec();
-  recognition.onresult = (e) => {
-    let fin='',int='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal) fin+=e.results[i][0].transcript+' ';
-      else int=e.results[i][0].transcript;
-    }
-    if(fin) accumulated+=fin;
-    if(transcriptEl) transcriptEl.textContent = accumulated;
-    if(interimEl) interimEl.textContent = int;
-  };
-  recognition.onend = ()=>{ if(isListening) setTimeout(()=>{ if(isListening) try{launchRec();}catch(e){stopListening();} },200); };
-  recognition.onerror = (e)=>{ if(!isListening) return; if(e.error==='no-speech'||e.error==='aborted') setTimeout(()=>{ if(isListening) try{launchRec();}catch(er){stopListening();} },200); else stopListening(); };
-  try{recognition.start();}catch(e){stopListening();}
-}
-
-function stopListening() {
-  if(!isListening) return;
-  isListening=false;
-  clearInterval(timerIv); clearTimeout(timerTo);
-  try{recognition.abort();}catch(e){}
-  if(transcriptEl) {
-    const val = transcriptEl.textContent.trim();
-    answers[STAGES[step].id] = val;
-    // Re-evaluate Next button based on whether requirement is now met
-    const nb = document.getElementById('nextBtn');
-    if(nb) nb.disabled = needsAnswer(STAGES[step]);
-  }
-  if(interimEl) interimEl.textContent='';
-  const vb=document.getElementById('vbtn'),vt=document.getElementById('vbtxt'),
-        wv=document.getElementById('wv'),tw=document.getElementById('twrap');
-  if(vb) vb.classList.remove('listening');
-  if(vt) vt.textContent='Tap to speak';
-  if(wv) wv.style.display='none';
-  if(tw) tw.style.display='none';
-}
-
-// ── NAVIGATION ────────────────────────────────────────────────────
-function isSecondaryOnCall() {
-  return answers['shift_nature'] === STAGES[2].options[4];
-}
-function disruptionRequired() {
-  return answers['disruption'] !== STAGES[1].options[0] ||
-         answers['shift_nature'] !== STAGES[2].options[0];
-}
-
-function goNext() {
-  if(isListening) stopListening();
-  commitCurrentStep();
-
-  // Step 2: skip secondary on-call step (3) if not secondary on-call
-  if(step === 2 && !isSecondaryOnCall()) {
-    answers['oncall_hours'] = '';
-    step += 2; renderStage(); scrollTop(); return;
+  // Run invoice/paystub automation immediately with the exact row we just appended
+  try {
+    processRow(row, ss);
+    Logger.log('Automation triggered successfully');
+  } catch(err) {
+    Logger.log('Automation error: ' + err.toString() + '\n' + err.stack);
   }
 
-  // Step 4: block if disruption explanation required but empty
-  if(step === 4 && disruptionRequired()) {
-    const note = (answers['disruption_notes'] || '').trim();
-    if (!note) {
-      const el = document.getElementById('tdisp');
-      if(el){ el.style.border='2px solid var(--red)'; setTimeout(()=>{ el.style.border=''; },1800); }
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ─────────────────────────────────────────────────────────
+// HANDLE RECEIPT UPLOAD
+// Saves base64 image to correct client/week folder in Drive
+// ─────────────────────────────────────────────────────────
+function handleReceiptUpload(data) {
+  const clientName = (data.clientName || '').trim();
+  const visitDate  = new Date(data.visitDate);
+  const fileName   = data.fileName || ('receipt_' + Date.now() + '.jpg');
+  const base64Data = data.fileData; // base64 string, no data URL prefix
+
+  if (!clientName || !base64Data) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'Missing client name or file data' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Get or create the folder path
+  const receiptFolder = getOrCreateReceiptFolder(clientName, visitDate);
+
+  // Decode base64 and save file
+  const blob = Utilities.newBlob(
+    Utilities.base64Decode(base64Data),
+    'image/jpeg',
+    fileName
+  );
+
+  const file = receiptFolder.createFile(blob);
+  Logger.log('Receipt saved: ' + file.getName() + ' → ' + receiptFolder.getName());
+
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      status: 'ok',
+      fileName: file.getName(),
+      folder: receiptFolder.getName()
+    }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ─────────────────────────────────────────────────────────
+// FOLDER NAVIGATION & CREATION
+// My Drive > Clients > [Client] > [Client - Receipts] > [date range]
+// ─────────────────────────────────────────────────────────
+function getOrCreateReceiptFolder(clientName, visitDate) {
+  const root = DriveApp.getRootFolder();
+
+  // 1. Get or create "Clients" root folder
+  const clientsFolder = getOrCreateSubfolder(root, CONFIG.CLIENTS_ROOT_FOLDER);
+
+  // 2. Get or create client folder (e.g. "Gloria Marlow")
+  const clientFolder = getOrCreateSubfolder(clientsFolder, clientName);
+
+  // 3. Get or create receipts folder (e.g. "Gloria Marlow - Receipts")
+  const receiptsFolder = getOrCreateSubfolder(clientFolder, clientName + ' - Receipts');
+
+  // 4. Get or create week folder (e.g. "4/12-18/2026")
+  const weekFolderName = getWeekFolderName(visitDate);
+  const weekFolder = getOrCreateSubfolder(receiptsFolder, weekFolderName);
+
+  return weekFolder;
+}
+
+function getOrCreateSubfolder(parent, name) {
+  const existing = parent.getFoldersByName(name);
+  if (existing.hasNext()) return existing.next();
+  return parent.createFolder(name);
+}
+
+// ─────────────────────────────────────────────────────────
+// WEEK FOLDER NAME
+// Format: M/DD-DD/YYYY (same month) or M/DD-M/DD/YYYY (cross-month)
+// Week runs Sunday–Saturday to match billing period
+// ─────────────────────────────────────────────────────────
+function getWeekFolderName(date) {
+  const d = new Date(date);
+
+  // Sunday of this week
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - d.getDay());
+
+  // Saturday of this week
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+
+  const sm = sunday.getMonth() + 1;
+  const sd = sunday.getDate();
+  const em = saturday.getMonth() + 1;
+  const ed = saturday.getDate();
+  const yr = saturday.getFullYear();
+
+  if (sm === em) {
+    // Same month: 4/12-18/2026
+    return `${sm}/${sd}-${ed}/${yr}`;
+  } else {
+    // Cross-month: 4/28-5/4/2026
+    return `${sm}/${sd}-${em}/${ed}/${yr}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// MAIN FORM TRIGGER — fires on every form submission
+// ─────────────────────────────────────────────────────────
+function onFormSubmit(e) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const responseSheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET);
+    if (!responseSheet) { Logger.log("ERROR: Form responses sheet not found"); return; }
+
+    const lastRow = responseSheet.getLastRow();
+    const rowData = responseSheet.getRange(lastRow, 1, 1, 35).getValues()[0];
+    processRow(rowData, ss);
+  } catch(err) {
+    Logger.log("✗ Error: " + err.toString() + "\n" + err.stack);
+  }
+}
+
+function processRow(rowData, ss) {
+  try {
+    if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+    const clientName    = (rowData[COL.CLIENT_NAME]    || "").trim();
+    const caregiverName = (rowData[COL.CAREGIVER_NAME] || "").trim();
+    const dateOfVisit   = rowData[COL.DATE_OF_VISIT];
+    const timeIn        = rowData[COL.ACTUAL_TIME_IN];
+    const timeOut       = rowData[COL.ACTUAL_TIME_OUT];
+    const services      = (rowData[COL.SERVICES_PROVIDED] || "").toLowerCase();
+    const shiftNature   = (rowData[COL.SHIFT_NATURE]   || "").toLowerCase();
+    const onCallHours   = parseFloat(rowData[COL.ONCALL_HOURS])  || 0;
+    const mileage       = parseFloat(rowData[COL.MILEAGE])       || 0;
+    const reimbAmount   = parseFloat(rowData[COL.REIMB_AMOUNT])  || 0;
+    const reimbDesc     = (rowData[COL.REIMB_DESCRIPTION] || "").trim();
+
+    if (!clientName || !caregiverName || !dateOfVisit) {
+      Logger.log("ERROR: Missing required fields — client:" + clientName + " caregiver:" + caregiverName + " date:" + dateOfVisit);
       return;
     }
-  }
 
-  // Step 11: skip baseline notes (12) if no changes
-  if(step === 11 && answers['baseline_change'] === STAGES[11].options[0]) {
-    answers['baseline_notes'] = '';
-    step += 2; renderStage(); scrollTop(); return;
-  }
-
-  // Step 13: skip safety notes (15) if no concern
-  if(step === 13 && answers['safety_flag'] === 'No') {
-    answers['safety_notes'] = '';
-    step += 2; renderStage(); scrollTop(); return;
-  }
-
-  // Step 16: skip transport details (17) if no transport
-  if(step === 16 && answers['transport'] === 'No') {
-    answers['mileage']='0'; answers['reimbursable_amt']='0'; answers['reimbursable_desc']='';
-    step += 2; renderStage(); scrollTop(); return;
-  }
-
-  if(step < TOTAL-1){ step++; renderStage(); scrollTop(); }
-  else renderReview();
-}
-
-function goBack() {
-  if(isListening) stopListening();
-  commitCurrentStep();
-  if(step <= 0) return;
-  step--;
-
-  // Mirror the forward skip logic so skipped steps are never shown going back
-  if(step === 17 && answers['transport'] === 'No') { step--; }
-  else if(step === 15 && answers['safety_flag'] === 'No') { step--; }
-  else if(step === 12 && answers['baseline_change'] === STAGES[11].options[0]) { step--; }
-  else if(step === 4 && !disruptionRequired() && !isSecondaryOnCall()) { step -= 2; }
-  else if(step === 3 && !isSecondaryOnCall()) { step--; }
-
-  renderStage(); scrollTop();
-}
-
-function scrollTop() {
-  document.querySelector('.scroll-area').scrollTo({top:0,behavior:'smooth'});
-}
-
-function commitCurrentStep() {
-  const s = STAGES[step];
-  if(s.type==='voice' && transcriptEl) answers[s.id]=transcriptEl.textContent.trim();
-  if(s.type==='select+inputs') {
-    s.fields.forEach(f=>{ const el=document.getElementById(f.id); if(el) answers[f.id]=el.value; });
-  }
-  if(s.type==='inputs') {
-    s.fields.forEach(f=>{ const el=document.getElementById(f.id); if(el) answers[f.id]=el.value; });
-  }
-}
-
-// ── REVIEW ────────────────────────────────────────────────────────
-function renderReview() {
-  setPct(TOTAL);
-  const fmt = (val) => {
-    if (!val || val === '' || val === 'undefined') return '<em style="color:var(--muted)">Not provided</em>';
-    if (Array.isArray(val)) return val.join(', ');
-    return val;
-  };
-
-  const rows = STAGES.filter(s=>s.type!=='attest').map((s,i)=>{
-    let qLabel='', aVal='';
-    if(s.type==='select+inputs'||s.type==='inputs'){
-      const parts = s.fields.map(f=>`<div class="review-q">${f.label}</div><div class="review-a">${fmt(answers[f.id])}</div>`).join('');
-      return `<div class="review-card"><div class="review-section">${s.section}<button class="review-edit" onclick="jumpTo(${i})">Edit</button></div>${parts}</div>`;
+    // Parse date robustly — handles Date objects, ISO strings, and M/D/YYYY strings
+    let visitDate;
+    if (dateOfVisit instanceof Date) {
+      visitDate = dateOfVisit;
+    } else {
+      const s = dateOfVisit.toString().trim();
+      // Handle ISO format: 2026-04-20
+      if (s.match(/^\d{4}-\d{2}-\d{2}/)) {
+        const parts = s.substring(0,10).split('-');
+        visitDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+      } else {
+        // Handle M/D/YYYY or MM/DD/YYYY
+        const parts = s.split('/');
+        if (parts.length >= 3) {
+          visitDate = new Date(parseInt(parts[2]), parseInt(parts[0])-1, parseInt(parts[1]));
+        } else {
+          visitDate = new Date(s);
+        }
+      }
     }
-    qLabel = s.q; aVal = fmt(answers[s.id]);
-    return `<div class="review-card"><div class="review-section">${s.section}<button class="review-edit" onclick="jumpTo(${i})">Edit</button></div><div class="review-q">${qLabel}</div><div class="review-a">${aVal}</div></div>`;
-  }).join('');
 
-  document.getElementById('root').innerHTML = `
-    <div style="padding:18px 0 6px;animation:up 0.3s ease;">
-      <div style="font-family:'Fraunces',serif;font-size:22px;margin-bottom:4px;">Review Notes</div>
-      <div style="font-size:12px;color:var(--muted);">Check everything before submitting.</div>
-    </div>
-    ${rows}
-    <button class="submit-btn" onclick="submitNotes()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      Submit Visit Note
-    </button>`;
-}
+    if (isNaN(visitDate.getTime())) {
+      Logger.log("ERROR: Could not parse date: " + dateOfVisit);
+      return;
+    }
 
-function jumpTo(i) { step=i; renderStage(); scrollTop(); }
+    Logger.log("Processing: " + clientName + " / " + caregiverName + " / " + visitDate.toDateString());
+    const billingStart = getBillingPeriodStart(visitDate);
+    const billingEnd   = getBillingPeriodEnd(visitDate);
+    const billingStr   = formatDate(billingStart, "MM/dd/yyyy") + " – " + formatDate(billingEnd, "MM/dd/yyyy");
 
-// ── SUBMIT ────────────────────────────────────────────────────────
-// ── RECEIPT UPLOAD ────────────────────────────────────────────────
-// Receipt management — supports adding one at a time with thumbnail grid
-if (!answers['receipts']) answers['receipts'] = [];
+    // Invoice date = Sunday immediately after billing week closes (day after Saturday end)
+    const invoiceDate  = new Date(billingEnd);
+    invoiceDate.setDate(billingEnd.getDate() + 1); // Saturday + 1 = Sunday
+    const dateStr      = formatDate(invoiceDate, "MM/dd/yyyy");
+    const tabDate      = formatDate(invoiceDate, "MMdd"); // tab name uses invoice date
 
-function restoreReceiptGrid() {
-  const grid = document.getElementById('receiptGrid');
-  const count = document.getElementById('receiptCount');
-  if (!grid) return;
-  grid.innerHTML = '';
-  const receipts = answers['receipts'] || [];
-  receipts.forEach((r, i) => {
-    const thumb = document.createElement('div');
-    thumb.className = 'receipt-thumb';
-    thumb.innerHTML = '<img src="' + r.preview + '" alt="Receipt ' + (i+1) + '">' +
-      '<div class="rt-status">' + (r.uploaded ? '✓' : r.error ? '⚠️' : '⏳') + '</div>' +
-      '<button class="rt-remove" onclick="removeReceipt(' + i + ')">×</button>';
-    grid.appendChild(thumb);
-  });
-  if (count) {
-    count.textContent = receipts.length > 0
-      ? receipts.length + ' receipt' + (receipts.length > 1 ? 's' : '') + ' added'
-      : '';
-  }
-  // Update add button label
-  const btn = document.getElementById('receiptAddBtn');
-  if (btn) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> ' +
-    (receipts.length > 0 ? 'Add Another Receipt' : 'Add Receipt');
-}
+    const hoursWorked = calculateHours(timeIn, timeOut);
+    const client      = lookupClient(ss, clientName);
+    const caregiver   = lookupCaregiver(ss, caregiverName);
+    const billingRate = getBillingRate(services);
+    const payRate     = calculatePayRate(caregiver, shiftNature);
 
-function removeReceipt(idx) {
-  if (!answers['receipts']) return;
-  answers['receipts'].splice(idx, 1);
-  restoreReceiptGrid();
-}
+    let retainerAmount = 0, retainerLabel = "";
+    const isFirstSundayOfMonth = billingEnd.getDate() <= 7;
+    if (isFirstSundayOfMonth && client && client.retainerType &&
+        client.retainerType.toLowerCase() !== "none") {
+      const nextMonth   = new Date(billingEnd.getFullYear(), billingEnd.getMonth() + 1, 1);
+      retainerAmount    = calculateRetainer(client, nextMonth);
+      const monthName   = nextMonth.toLocaleString("default", { month: "long" });
+      retainerLabel     = `Continuity Care Retainer — ${monthName} ${nextMonth.getFullYear()}`;
+    }
 
-function handleReceiptSelected(input) {
-  if (!input.files || !input.files[0]) return;
-  const file = input.files[0];
-  const visitDate  = answers['visit_date'] || new Date().toISOString().split('T')[0];
-  const clientName = answers['client'] || '';
-  const receiptIdx = (answers['receipts'] || []).length;
-  const ext        = (file.name.split('.').pop() || 'jpg').toLowerCase();
-  const fileName   = 'receipt_' + clientName.replace(/ /g,'_') + '_' + visitDate + '_' + (receiptIdx+1) + '_' + Date.now() + '.' + ext;
+    const isSecondary    = shiftNature.includes("secondary");
+    const onCallStipend  = isSecondary ? CONFIG.ONCALL_STIPEND : 0;
+    const onCallExposure = isSecondary
+      ? parseFloat((onCallHours * CONFIG.ONCALL_EXPOSURE_RATE).toFixed(2)) : 0;
 
-  // Add placeholder entry immediately so caregiver sees it
-  if (!answers['receipts']) answers['receipts'] = [];
-  const entry = { preview: '', uploaded: false, error: false, fileName };
-  answers['receipts'].push(entry);
+    const invoiceNum     = getNextClientInvoiceNumber(clientName);
+    const safeClient     = clientName.replace(/[^a-zA-Z0-9]/g,"").substring(0,12);
+    const safeCaregiver  = caregiverName.replace(/[^a-zA-Z0-9]/g,"").substring(0,10);
+    const invTabName     = `INV-${safeClient}-${tabDate}`;
+    const payTabName     = `PAY-${safeCaregiver}-${tabDate}`;
 
-  // Read preview
-  const previewReader = new FileReader();
-  previewReader.onload = (e) => {
-    entry.preview = e.target.result;
-    restoreReceiptGrid();
-
-    // Now upload
-    const base64 = e.target.result.split(',')[1];
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ type: 'receipt', clientName, visitDate, fileName, fileData: base64 })
-    })
-    .then(() => {
-      entry.uploaded = true;
-      entry.error = false;
-      answers['receipt_uploaded'] = true;
-      restoreReceiptGrid();
-    })
-    .catch(() => {
-      entry.error = true;
-      restoreReceiptGrid();
+    populateInvoice(ss, {
+      invoiceNum, dateStr, billingStr, billingStart, billingEnd,
+      clientName, client, billingRate, hoursWorked, services,
+      mileage, reimbAmount, reimbDesc,
+      retainerAmount, retainerLabel,
+      timeIn: rowData[COL.ACTUAL_TIME_IN],
+      timeOut: rowData[COL.ACTUAL_TIME_OUT],
+      tabName: invTabName
     });
-  };
-  previewReader.readAsDataURL(file);
 
-  // Reset input so same file can be re-selected if needed
-  input.value = '';
+    const isOwner = CONFIG.OWNER_CAREGIVERS.some(n =>
+      caregiverName.toLowerCase().trim() === n.toLowerCase().trim()
+    );
+
+    if (!isOwner) {
+      populatePaystub(ss, {
+        caregiverName, caregiver, payRate, dateStr, billingStr,
+        hoursWorked, mileage, reimbAmount,
+        onCallStipend, onCallExposure, isSecondary,
+        tabName: payTabName
+      });
+    }
+
+    Logger.log(
+      `✓ ${clientName} | Invoice #${invoiceNum} | ${caregiverName} | ${dateStr} | ${hoursWorked}hrs` +
+      (isOwner ? " | Owner — no paystub" : "") +
+      (retainerAmount > 0 ? ` | Retainer $${retainerAmount}` : "")
+    );
+
+  } catch (err) {
+    Logger.log("✗ Error: " + err.toString() + "\n" + err.stack);
+  }
 }
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqPtx7KRwWPTJX1w_W-C3otIgAy03Uy_w5mMfyu9ejUC6yfSgmw_xjCmjCIhjic1PzGg/exec';
+// ─────────────────────────────────────────────────────────
+// POPULATE INVOICE
+// Uses getMergedRanges-safe writing via getRange().getCell(1,1)
+// ─────────────────────────────────────────────────────────
+function setCell(sheet, a1, value) {
+  try {
+    // Get the range — if merged, setValue on the range itself works correctly
+    sheet.getRange(a1).setValue(value);
+  } catch(e) {
+    Logger.log("setCell error " + a1 + ": " + e.toString());
+  }
+}
 
-function submitNotes() {
+function clearCell(sheet, a1) {
+  try { sheet.getRange(a1).clearContent(); } catch(e) {}
+}
+
+function populateInvoice(ss, d) {
+  const template = ss.getSheetByName(CONFIG.INVOICE_TEMPLATE_SHEET);
+  if (!template) { Logger.log("ERROR: Invoice template not found"); return; }
+
+  const sheet = template.copyTo(ss);
+  sheet.setName(d.tabName);
+  ss.moveActiveSheet(ss.getNumSheets());
+
+  // Clear all editable data cells first (use row:col notation to avoid merge issues)
+  // Clear by setting to empty string — works on merged cells
+  const toClear = [
+    "B4","B5","B6","D6",
+    "B9","B10","B11","B12",
+    "B16","B17","B18",
+    "B23","D23","B24","D24",
+    "B29","B30","B31","D31","B32","D32",
+    "B38","D38","B39","D39"
+  ];
+  toClear.forEach(c => clearCell(sheet, c));
+
+  Logger.log("Writing invoice: #" + d.invoiceNum + " | " + d.clientName + " | " + d.dateStr + " | " + d.hoursWorked + "hrs");
+
+  // Header
+  setCell(sheet, "B4", d.invoiceNum);
+  setCell(sheet, "B5", d.dateStr);
+  setCell(sheet, "B6", formatDate(d.billingStart, "MM/dd/yyyy"));
+  setCell(sheet, "D6", formatDate(d.billingEnd, "MM/dd/yyyy"));
+
+  // Client info — B9:F9 merge etc
+  setCell(sheet, "B9",  d.clientName);
+  if (d.client) {
+    setCell(sheet, "B10", d.client.address        || "");
+    setCell(sheet, "B11", d.client.billingContact  || "");
+    setCell(sheet, "B12", d.client.billingEmail    || "");
+  }
+
+  // Care hours
+  const svc = (d.services || "").toLowerCase();
+  if (svc.includes("personal care")) {
+    setCell(sheet, "B17", d.hoursWorked);
+  } else if (svc.includes("specialized") || svc.includes("cognitive")) {
+    setCell(sheet, "B18", d.hoursWorked);
+  } else {
+    setCell(sheet, "B16", d.hoursWorked);
+  }
+
+  // Retainer
+  if (d.retainerAmount > 0) {
+    setCell(sheet, "B23", d.retainerLabel);
+    setCell(sheet, "D23", d.retainerAmount);
+  }
+
+  // Mileage
+  if (d.mileage > 0) {
+    setCell(sheet, "B31", d.mileage + " miles");
+    setCell(sheet, "D31", parseFloat((d.mileage * CONFIG.MILEAGE_RATE).toFixed(2)));
+  }
+
+  // Reimbursables
+  if (d.reimbAmount > 0) {
+    setCell(sheet, "B32", d.reimbDesc || "Client-approved purchases");
+    setCell(sheet, "D32", d.reimbAmount);
+  }
+
+  Logger.log("Invoice created: " + d.tabName + " (#" + d.invoiceNum + ")");
+}
+
+// ─────────────────────────────────────────────────────────
+// POPULATE PAYSTUB
+// ─────────────────────────────────────────────────────────
+function populatePaystub(ss, d) {
+  const template = ss.getSheetByName(CONFIG.PAYSTUB_TEMPLATE_SHEET);
+  if (!template) { Logger.log("ERROR: Paystub template not found"); return; }
+
+  const sheet = template.copyTo(ss);
+  sheet.setName(d.tabName);
+  ss.moveActiveSheet(ss.getNumSheets());
+
+  ["C6","F5","F6","C9","C10","C12","C13"
+  ].forEach(c => { try { sheet.getRange(c).clearContent(); } catch(e){} });
+
+  sheet.getRange("F5").setValue(d.dateStr);
+  sheet.getRange("C6").setValue(d.caregiverName);
+  sheet.getRange("F6").setValue(d.billingStr);
+
+  if (d.isSecondary) {
+    sheet.getRange("C9").setValue(0);
+    sheet.getRange("C10").setValue(d.payRate);
+    sheet.getRange("C13").setValue(parseFloat((d.onCallStipend + d.onCallExposure).toFixed(2)));
+  } else {
+    sheet.getRange("C9").setValue(d.hoursWorked);
+    sheet.getRange("C10").setValue(d.payRate);
+    if (d.reimbAmount > 0) sheet.getRange("C13").setValue(d.reimbAmount);
+  }
+
+  if (d.mileage > 0) sheet.getRange("C12").setValue(d.mileage);
+
+  Logger.log("Paystub created: " + d.tabName);
+}
+
+// ─────────────────────────────────────────────────────────
+// DIRECTORY LOOKUPS
+// ─────────────────────────────────────────────────────────
+function lookupClient(ss, clientName) {
+  const sheet = ss.getSheetByName(CONFIG.CLIENT_DIRECTORY_SHEET);
+  if (!sheet) { Logger.log("WARNING: Client Directory not found"); return null; }
+  const data = sheet.getDataRange().getValues();
+  const name = clientName.toLowerCase().trim();
+  for (let i = 3; i < data.length; i++) {
+    if ((data[i][0] || "").toString().toLowerCase().trim() === name) {
+      return {
+        name: data[i][0], address: data[i][1], billingContact: data[i][2],
+        billingEmail: data[i][3], careTier: data[i][4], visitSchedule: data[i][5],
+        retainerType: data[i][6], active: data[i][7], notes: data[i][8]
+      };
+    }
+  }
+  Logger.log("WARNING: Client not found: " + clientName);
+  return null;
+}
+
+function lookupCaregiver(ss, caregiverName) {
+  const sheet = ss.getSheetByName(CONFIG.CAREGIVER_DIRECTORY_SHEET);
+  if (!sheet) { Logger.log("WARNING: Caregiver Directory not found"); return null; }
+  const data = sheet.getDataRange().getValues();
+  const name = caregiverName.toLowerCase().trim();
+  for (let i = 3; i < data.length; i++) {
+    if ((data[i][0] || "").toString().toLowerCase().trim() === name) {
+      return {
+        name: data[i][0], hourlyRate: parseFloat(data[i][1]) || 0,
+        employmentType: data[i][2], startDate: data[i][3],
+        active: data[i][4], notes: data[i][5]
+      };
+    }
+  }
+  Logger.log("WARNING: Caregiver not found: " + caregiverName);
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────
+// PAY & BILLING RATE CALCULATIONS
+// ─────────────────────────────────────────────────────────
+function calculatePayRate(caregiver, shiftNature) {
+  let rate = (caregiver && caregiver.hourlyRate > 0) ? caregiver.hourlyRate : 18.50;
+  const nature = (shiftNature || "").toLowerCase();
+  if (nature.includes("emergency"))  rate += CONFIG.EMERGENCY_PREMIUM;
+  else if (nature.includes("activation")) rate += CONFIG.ACTIVATION_PREMIUM;
+  return parseFloat(rate.toFixed(2));
+}
+
+function getBillingRate(services) {
+  const s = (services || "").toLowerCase();
+  if (s.includes("specialized") || s.includes("cognitive")) return CONFIG.BILLING_RATES["specialized"];
+  if (s.includes("personal care")) return CONFIG.BILLING_RATES["personal"];
+  return CONFIG.BILLING_RATES["companion"];
+}
+
+// ─────────────────────────────────────────────────────────
+// RETAINER CALCULATION
+// ─────────────────────────────────────────────────────────
+function calculateRetainer(client, targetMonth) {
+  if (!client || !client.visitSchedule) return 0;
+  const schedule = parseVisitSchedule(client.visitSchedule);
+  let totalHours = 0;
+  for (const entry of schedule) {
+    totalHours += countDayOccurrencesInMonth(entry.dayOfWeek, targetMonth) * entry.hours;
+  }
+  return calculateSlidingScale(totalHours);
+}
+
+function parseVisitSchedule(str) {
+  const dayMap = { sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6 };
+  return (str || "").split(",").reduce((acc, part) => {
+    const idx = part.indexOf(":");
+    if (idx === -1) return acc;
+    const day   = part.substring(0, idx).trim().toLowerCase();
+    const hours = parseFloat(part.substring(idx + 1).trim()) || 0;
+    if (dayMap[day] !== undefined && hours > 0) acc.push({ dayOfWeek: dayMap[day], hours });
+    return acc;
+  }, []);
+}
+
+function countDayOccurrencesInMonth(dayOfWeek, monthDate) {
+  const y = monthDate.getFullYear(), m = monthDate.getMonth();
+  const days = new Date(y, m + 1, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= days; d++) { if (new Date(y, m, d).getDay() === dayOfWeek) count++; }
+  return count;
+}
+
+function calculateSlidingScale(totalHours) {
+  const r = CONFIG.RETAINER_RATES;
+  let result = 0, rem = totalHours;
+  const t1 = Math.min(rem, r.tier1_hours); result += t1 * r.tier1_rate; rem -= t1;
+  if (rem > 0) { const t2 = Math.min(rem, r.tier2_hours); result += t2 * r.tier2_rate; rem -= t2; }
+  if (rem > 0) result += rem * r.tier3_rate;
+  return parseFloat(result.toFixed(2));
+}
+
+// ─────────────────────────────────────────────────────────
+// BILLING PERIOD HELPERS
+// ─────────────────────────────────────────────────────────
+function getBillingPeriodStart(visitDate) {
+  const d = new Date(visitDate); d.setDate(d.getDate() - d.getDay()); return d;
+}
+function getBillingPeriodEnd(visitDate) {
+  const d = new Date(visitDate); d.setDate(d.getDate() + (6 - d.getDay())); return d;
+}
+
+// ─────────────────────────────────────────────────────────
+// PER-CLIENT INVOICE NUMBERING
+// ─────────────────────────────────────────────────────────
+function getNextClientInvoiceNumber(clientName) {
+  const props = PropertiesService.getScriptProperties();
+  const key   = "INV_" + clientName.replace(/\s+/g, "_").toUpperCase();
+  let current = parseInt(props.getProperty(key) || "0");
+  current++;
+  props.setProperty(key, current.toString());
+  return current;
+}
+
+// ─────────────────────────────────────────────────────────
+// UTILITY
+// ─────────────────────────────────────────────────────────
+function calculateHours(timeIn, timeOut) {
+  try {
+    if (!timeIn || !timeOut) return 0;
+    // Parse time string — handles both "14:00", "2:00 PM", and Date objects
+    function parseTime(t) {
+      if (t instanceof Date) return t;
+      const s = t.toString().trim();
+      // "2:00 PM" or "6:15 AM" format
+      const ampm = s.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+      if (ampm) {
+        let h = parseInt(ampm[1]);
+        const m = parseInt(ampm[2]);
+        const period = ampm[3].toUpperCase();
+        if (period === 'PM' && h !== 12) h += 12;
+        if (period === 'AM' && h === 12) h = 0;
+        const d = new Date(2000, 0, 1, h, m);
+        return d;
+      }
+      // "14:00" or "2:00" format
+      const hm = s.match(/^(\d+):(\d+)$/);
+      if (hm) {
+        return new Date(2000, 0, 1, parseInt(hm[1]), parseInt(hm[2]));
+      }
+      return new Date(s);
+    }
+    let diff = parseTime(timeOut) - parseTime(timeIn);
+    if (diff < 0) diff += 86400000;
+    return Math.round((diff / 3600000) * 4) / 4;
+  } catch(e) { Logger.log('calculateHours error: ' + e); return 0; }
+}
+
+// Convert "14:00" or "2:00" to "2:00 PM" or "2:00 AM"
+function to12Hr(timeStr) {
+  if (!timeStr) return '';
+  const str = timeStr.toString().trim();
+  // Already has AM/PM
+  if (str.includes('AM') || str.includes('PM')) return str;
+  // Parse HH:MM
+  const parts = str.split(':');
+  if (parts.length < 2) return str;
+  let h = parseInt(parts[0]);
+  const m = parts[1].substring(0,2);
+  if (isNaN(h)) return str;
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return h + ':' + m + ' ' + suffix;
+}
+
+function formatDate(date, fmt) {
+  try {
+    return Utilities.formatDate(new Date(date), Session.getScriptTimeZone(), fmt);
+  } catch(e) { return ""; }
+}
+
+// ─────────────────────────────────────────────────────────
+// SETUP — run once to activate trigger
+// ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// PROCESS NEW ROWS — runs every minute via time trigger
+// Checks for rows not yet processed and generates invoice/paystub
+// ─────────────────────────────────────────────────────────
+function processNewRows() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET);
+  if (!sheet) return;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  for (let r = 2; r <= lastRow; r++) {
+    const processed = sheet.getRange(r, 33).getValue();
+    if (processed === 'PROCESSED') continue;
+    const rowData = sheet.getRange(r, 1, 1, 32).getValues()[0];
+    const clientName   = (rowData[COL.CLIENT_NAME]    || '').trim();
+    const caregiverName = (rowData[COL.CAREGIVER_NAME] || '').trim();
+    const dateOfVisit  = rowData[COL.DATE_OF_VISIT];
+    if (!clientName || !caregiverName || !dateOfVisit) continue;
+    Logger.log('processNewRows: row ' + r + ' — ' + clientName + ' / ' + caregiverName);
+    try {
+      processRow(rowData, ss);
+      sheet.getRange(r, 33).setValue('PROCESSED');
+      Logger.log('Row ' + r + ' processed successfully');
+    } catch(err) {
+      Logger.log('Error row ' + r + ': ' + err.toString() + '\n' + err.stack);
+    }
+  }
+}
+
+function setupTrigger() {
+  // Remove ALL existing triggers
+  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+
+  // Time-based trigger — runs every minute, fully authorized, reliable
+  ScriptApp.newTrigger("processNewRows")
+    .timeBased()
+    .everyMinutes(1)
+    .create();
+
+  const props = PropertiesService.getScriptProperties();
+  for (const [name, num] of Object.entries(CONFIG.CLIENT_INVOICE_START)) {
+    const key = "INV_" + name.replace(/\s+/g, "_").toUpperCase();
+    props.setProperty(key, num.toString());
+  }
+
+  Logger.log("✓ Time trigger created.");
+  SpreadsheetApp.getUi().alert("Setup Complete", "✓ Automation active.\n\nInvoices will generate within 1 minute of submission.", SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+// ─────────────────────────────────────────────────────────
+// SHEET CHANGE TRIGGER
+// Fires when any change is made to the spreadsheet
+// Detects new rows added by KinCareNote and runs automation
+// ─────────────────────────────────────────────────────────
+function onSheetChange(e) {
+  try {
+    // Only act on row insertions into the Form Responses sheet
+    if (e.changeType !== 'INSERT_ROW') return;
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET);
+    if (!sheet) return;
+
+    // Get the last row — that's the new submission
+    const lastRow = sheet.getLastRow();
+    const rowData = sheet.getRange(lastRow, 1, 1, 35).getValues()[0];
+
+    // Validate it has required fields before processing
+    const clientName    = (rowData[COL.CLIENT_NAME]    || '').trim();
+    const caregiverName = (rowData[COL.CAREGIVER_NAME] || '').trim();
+    const dateOfVisit   = rowData[COL.DATE_OF_VISIT];
+
+    if (!clientName || !caregiverName || !dateOfVisit) {
+      Logger.log('onSheetChange: skipping row — missing required fields');
+      return;
+    }
+
+    Logger.log('onSheetChange: new submission detected — ' + clientName + ' / ' + caregiverName);
+    onFormSubmit(null); // run the main automation
+
+  } catch(err) {
+    Logger.log('onSheetChange ERROR: ' + err.toString());
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// TEST FUNCTIONS
+// ─────────────────────────────────────────────────────────
+function testConnection() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET);
+  if (sheet) {
+    SpreadsheetApp.getUi().alert('✓ Connected! Sheet has ' + sheet.getLastRow() + ' rows.');
+  } else {
+    SpreadsheetApp.getUi().alert('❌ Sheet "Form Responses 1" not found.');
+  }
+}
+
+function testFolderCreation() {
+  const folder = getOrCreateReceiptFolder('Gloria Marlow', new Date());
+  SpreadsheetApp.getUi().alert('✓ Folder ready: ' + folder.getName());
+}
+
+// ─────────────────────────────────────────────────────────
+// TEST SUBMISSION — run this instead of submitting from phone
+// Simulates a real CareNote submission with realistic data
+// ─────────────────────────────────────────────────────────
+function testSubmission() {
+  const today = new Date();
+  const dateStr = (today.getMonth()+1) + '/' + today.getDate() + '/' + today.getFullYear();
+
   const row = [
     new Date().toISOString(),
-    caregiverEmail || '',
-    answers['client'] || '',
-    caregiverName || '',
-    answers['visit_date'] || '',
-    answers['shift_start'] || '',
-    answers['time_in'] || '',
-    answers['time_out'] || '',
-    answers['disruption'] || '',
-    answers['shift_nature'] || '',
-    answers['oncall_hours'] || '',
-    answers['disruption_notes'] || '',
-    Array.isArray(answers['services']) ? answers['services'].join(', ') : (answers['services'] || ''),
-    answers['engagement'] || '',
-    answers['small_detail'] || '',
-    '',
-    answers['reimbursable_desc'] || '',
-    answers['reimbursable_amt'] || '',
-    answers['emotional'] || '',
-    answers['mobility'] || '',
-    answers['nutrition'] || '',
-    answers['baseline_change'] || '',
-    answers['baseline_notes'] || '',
-    answers['safety_flag'] || '',
-    Array.isArray(answers['env_factors']) ? answers['env_factors'].join(', ') : (answers['env_factors'] || ''),
-    answers['safety_notes'] || '',
-    answers['transport'] || '',
-    answers['mileage'] || '',
-    answers['team_notes'] || '',
-    answers['next_caregiver'] || '',
-    answers['wins'] || '',
-    answers['attest'] ? 'I confirm this note is accurate, objective, and complete.' : ''
+    'ksmith71208@yahoo.cc',
+    'Gloria Marlow',
+    'Kinsey Davis',
+    dateStr,
+    '2:00 PM',
+    '2:00 PM',
+    '6:00 PM',
+    'Yes — occurred as scheduled',
+    'Regularly scheduled shift',
+    '', '', 
+    'Companionship / conversation, Meal preparation / assistance',
+    'We talked about her garden and watched her favorite show.',
+    'She laughed when the cat knocked over her water glass.',
+    '', '', '',
+    'Baseline / typical', 'Baseline', 'Baseline / typical',
+    'No changes noted', '', 'No', 'None', '', 'No', '', '', 
+    'Client prefers morning medications with orange juice.',
+    'Great visit — client was very engaged today.',
+    'I confirm this note is accurate, objective, and complete.'
   ];
 
-  document.getElementById('root').innerHTML = `
-    <div style="text-align:center;padding:60px 20px;">
-      <div style="font-size:40px;margin-bottom:16px;">⏳</div>
-      <div style="font-family:'Fraunces',serif;font-size:20px;margin-bottom:8px;">Submitting…</div>
-      <div style="font-size:13px;color:var(--muted);">Just a moment.</div>
-    </div>`;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET);
+  if (!sheet) { Logger.log('ERROR: Sheet not found'); return; }
+  sheet.appendRow(row);
+  Logger.log('Test row appended');
 
-  fetch(SCRIPT_URL, {
-    method:'POST', mode:'no-cors',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({row})
-  })
-  .then(()=>showSuccess())
-  .catch(()=>{
-    document.getElementById('root').innerHTML=`
-      <div style="text-align:center;padding:60px 20px;">
-        <div style="font-size:40px;margin-bottom:16px;">⚠️</div>
-        <div style="font-family:'Fraunces',serif;font-size:20px;margin-bottom:8px;">Submission Failed</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:24px;">Check your connection and try again.</div>
-        <button class="btn-new" onclick="submitNotes()">Retry</button>
-      </div>`;
-  });
+  try {
+    processRow(row, ss);
+    SpreadsheetApp.getUi().alert('Test complete! Check for new invoice tab.');
+  } catch(err) {
+    SpreadsheetApp.getUi().alert('Error: ' + err.toString());
+    Logger.log('testSubmission ERROR: ' + err.toString() + '\n' + err.stack);
+  }
 }
 
-function showSuccess() {
-  setPct(TOTAL);
-  document.getElementById('pFill').style.background='var(--moss)';
-  document.getElementById('root').innerHTML=`
-    <div class="success">
-      <div class="success-ring">✓</div>
-      <h2>Note Submitted</h2>
-      <p>Great work today, ${caregiverName.split(' ')[0]}.<br>Visit note for <strong>${answers['client']||'your client'}</strong> has been recorded.</p>
-      <button class="btn-new" onclick="startNew()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Start New Note
-      </button>
-    </div>`;
+function checkClientInvoiceNumber() {
+  const clientName = "Gloria Marlow";
+  const props   = PropertiesService.getScriptProperties();
+  const key     = "INV_" + clientName.replace(/\s+/g, "_").toUpperCase();
+  const current = props.getProperty(key) || "0 (not set)";
+  SpreadsheetApp.getUi().alert("Invoice Counter",
+    `${clientName}: last invoice #${current}\nNext will be #${parseInt(current)+1}`,
+    SpreadsheetApp.getUi().ButtonSet.OK);
 }
-
-function startNew() {
-  answers={caregiver_name:caregiverName, visit_date:today()};
-  step=0;
-  document.getElementById('pFill').style.cssText='width:0%;background:linear-gradient(90deg,var(--moss),var(--gold-light))';
-  renderStage();
-  scrollTop();
-}
-</script>
-</body>
-</html>
