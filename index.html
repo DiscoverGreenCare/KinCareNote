@@ -156,7 +156,30 @@ body{font-family:'Outfit',sans-serif;background:var(--paper);color:var(--ink);di
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────────
-const CLIENTS = ['Select client…','Gloria Marlow'];
+// Clients loaded dynamically from Google Sheet
+let CLIENTS = ['Select client…','Gloria Marlow']; // fallback while loading
+
+async function loadClientsFromSheet() {
+  try {
+    const res = await fetch(SCRIPT_URL.replace('/exec','') + '/exec?type=clients');
+    const data = await res.json();
+    if (data.clients && data.clients.length > 0) {
+      CLIENTS = ['Select client…', ...data.clients.sort()];
+      // Update dropdown if already rendered
+      const sel = document.getElementById('client');
+      if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = CLIENTS.map(c => `<option value="${c}">${c}</option>`).join('');
+        sel.value = cur;
+      }
+      localStorage.setItem('dgcs_clients', JSON.stringify(CLIENTS));
+    }
+  } catch(e) {
+    // Use cached clients if available
+    const cached = localStorage.getItem('dgcs_clients');
+    if (cached) CLIENTS = JSON.parse(cached);
+  }
+}
 let caregiverName  = localStorage.getItem('dgcs_cg') || '';
 let caregiverEmail = localStorage.getItem('dgcs_cg_email') || '';
 let answers = {};
@@ -329,6 +352,7 @@ window.addEventListener('load', () => {
 });
 
 function boot() {
+  loadClientsFromSheet(); // refresh client list in background
   if (!caregiverName) { showNameSetup(); return; }
   document.getElementById('cgPill').style.display = 'block';
   document.getElementById('cgPill').textContent = caregiverName;
