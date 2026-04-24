@@ -698,13 +698,6 @@ function tapVoice() {
   isListening ? stopListening() : startListening();
 }
 
-function mkRec() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const r = new SR();
-  r.continuous = false; r.interimResults = true; r.lang = 'en-US';
-  return r;
-}
-
 function startListening() {
   if (!micGranted || !supported) return;
   isListening = true;
@@ -732,20 +725,43 @@ function startListening() {
 }
 
 function launchRec() {
-  recognition = mkRec();
+  // Create ONE recognition object and reuse it — exactly like the working diagnostic
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
   recognition.onresult = (e) => {
-    let fin='',int='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal) fin+=e.results[i][0].transcript+' ';
-      else int=e.results[i][0].transcript;
+    let fin='', int='';
+    for(let i=e.resultIndex; i<e.results.length; i++){
+      const txt = e.results[i][0].transcript;
+      if(!txt || !txt.trim()) continue; // skip empty results Android fires
+      if(e.results[i].isFinal) fin += txt + ' ';
+      else int = txt;
     }
-    if(fin) accumulated+=fin;
-    if(transcriptEl) transcriptEl.textContent = accumulated;
-    if(interimEl) interimEl.textContent = int;
+    if(fin) accumulated += fin;
+    if(transcriptEl) transcriptEl.textContent = accumulated + int;
+    if(interimEl) interimEl.textContent = '';
   };
-  recognition.onend = ()=>{ if(isListening) setTimeout(()=>{ if(isListening) try{launchRec();}catch(e){stopListening();} },200); };
-  recognition.onerror = (e)=>{ if(!isListening) return; if(e.error==='no-speech'||e.error==='aborted') setTimeout(()=>{ if(isListening) try{launchRec();}catch(er){stopListening();} },200); else stopListening(); };
-  try{recognition.start();}catch(e){stopListening();}
+
+  recognition.onend = () => {
+    // Restart the SAME object — key insight from diagnostic
+    if(isListening) {
+      try { recognition.start(); } catch(e) { stopListening(); }
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if(!isListening) return;
+    if(e.error==='no-speech' || e.error==='aborted') {
+      try { recognition.start(); } catch(er) { stopListening(); }
+    } else {
+      stopListening();
+    }
+  };
+
+  try { recognition.start(); } catch(e) { stopListening(); }
 }
 
 function stopListening() {
